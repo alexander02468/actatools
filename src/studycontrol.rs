@@ -30,6 +30,7 @@ pub struct StudyController {
     pub variations: HashMap<VId, Variation>,
     pub branches: HashMap<BrId, Branch>,
     pub varstep_direct_dependencies: HashMap<VarStepId, Vec<VarStepId>>, // direct link to the dependent VarSteps, by Ids
+    pub varstep_upstream_branches_map: HashMap<VarStepId, Vec<BrId>>,
     pub varsteps: HashMap<VarStepId, VarStep>, // Vector of all Variation Specific Steps (VarSteps)
     pub varsteps_by_vid: HashMap<VId, Vec<VarStepId>>, //  tracks which VarSteps are part of each Variation
 }
@@ -123,6 +124,7 @@ impl StudyController {
         let mut varsteps: HashMap<VarStepId, VarStep> = HashMap::new();
         let mut varstep_direct_dependencies: HashMap<VarStepId, Vec<VarStepId>> = HashMap::new();
         let mut varsteps_by_vid: HashMap<VId, Vec<VarStepId>> = HashMap::new();
+        let mut varstep_upstream_branches_map: HashMap<VarStepId, Vec<BrId>> = HashMap::new();
 
         // For each variation, generate all the VarSteps, keeping track of the dependencies and adding as needed
         //
@@ -164,6 +166,14 @@ impl StudyController {
                 // now generate the VarStepId and make the VarStep
                 let varstep_uid =
                     VarStepId::from_uid_branches(&step.uid, varstep_upstream_branches.clone())?;
+
+                // Store the upstream branches against the new VarStepId, convert each Branch into it's BrId, not
+                // a &Branch
+                let varstep_upstream_brids : Vec<BrId> = varstep_upstream_branches
+                .iter()
+                .map(|x| x.uid.clone())
+                .collect();
+                varstep_upstream_branches_map.insert(varstep_uid.clone(), varstep_upstream_brids);
 
                 // use only upstream branches as it should be less costly than the full Variation Branches
                 let varstep =
@@ -213,6 +223,7 @@ impl StudyController {
             varsteps: varsteps,
             varstep_direct_dependencies: varstep_direct_dependencies,
             varsteps_by_vid: varsteps_by_vid,
+            varstep_upstream_branches_map,
         };
 
         Ok(study)

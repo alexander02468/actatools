@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "generated_by": "actatools",
+    "library_version": "0.2.0",
+    "digest_algorithm": "BLAKE3",
+    "generated_at_utc": "2026-04-30 6:29:12.90399 +00:00:00"
+  },
+  "record_entries": [
+    {
+      "file": {
+        "Relative": {
+          "base": "",
+          "relative": "./example_file_1.txt"
+        }
+      },
+      "digest": "756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a"
+    },
+    {
+      "file": {
+        "Relative": {
+          "base": "",
+          "relative": "./example_file_1_copy.txt"
+        }
+      },
+      "digest": "756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a"
+    },
+    {
+      "file": {
+        "Relative": {
+          "base": "",
+          "relative": "./example_file_2.txt"
+        }
+      },
+      "digest": "a07f50a89a8b7cc7348c89f64545e84b8741022d6b937870a850c79a8119a3cb"
+    }
+  ],
+  "digest": "9007586de5dc6d0067aa6642beba182d860305108c3011c27d8709abb69d62ad"
+}

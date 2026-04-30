@@ -1,0 +1,50 @@
+Record comparison
+=================
+
+Inputs
+------
+
+input1: record2.json
+input2: record1.json
+
+Summary
+-------
+
+  =  Same               2
+  ~  Changed            0
+  +  Added              1
+  -  Removed            0
+  !  Undetermined       0
+  !  Undetermined       0
+  -----------------------
+     Total              3
+
+Legend
+------
+
+  =  Same           record matched and digest is unchanged
+  ~  Changed        record matched but digest changed
+  +  Added          record exists only in input2
+  -  Removed        record exists only in input1
+  !  Undetermined   matcher could not safely pair records
+
+Results
+-------
+
+[0001] = SAME
+  key:        filename = example_file_1.txt
+  input1:     ./example_file_1.txt
+  input2:     ./example_file_1.txt
+  digest:     a8055d7c2429d9bb61dab83e3a0b83a0d7ed0158e5c076f94ecd596941555d2f
+
+[0002] + ADDED
+  key:        filename = example_file_1_copy.txt
+  input2:     ./example_file_1_copy.t
+  digest:     a8055d7c2429d9bb61dab83e3a0b83a0d7ed0158e5c076f94ecd596941555d2f
+
+[0003] = SAME
+  key:        filename = example_file_2.txt
+  input1:     ./example_file_2.txt
+  input2:     ./example_file_2.txt
+  digest:     c28c018ab0f9203de49dd98367dc58506ba89562dabd5de1da129ac3081cd475
+

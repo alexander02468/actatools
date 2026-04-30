@@ -1,0 +1,7 @@
+# This is a comment! It is ignored by the parser
+# 
+# Ultimately the .includes file is very simple. It just adds files line by line
+# Therefore, each line is a separate file
+./example_file_1.txt    # Text placed after a (#) is ignored
+./example_file_1_copy.txt
+./example_file_2.txt

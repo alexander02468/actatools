@@ -1,0 +1,61 @@
+# This is an example Config.toml written to use several Bash scripts. It is intentionally very minimal
+# and serves as a demonstration to the design and capabilities of ActaStudy
+#
+# It is written in the TOML format (toml.io for full spec)
+#
+# - Comments are indicated by the (#)
+# - Keys are distinguished from their value with "="
+# - Most parameters here are Strings, indicated by "<...>"
+# - [...] Indicate Tables/Nested Tables
+# - The dot . indicates a subtable when nested
+#
+####   STUDY PARAMETERS   #####
+#
+#
+study_name = "Example"
+design_file = "./design.csv"  # where the design file is located or will be created
+run_dir = "./runs/"  # Where runs are ran
+evidence_dir = "./evidence/" # Where evidence is stored
+
+## These define shared globals
+## They are not copied into each VarStep run directory, but they are tracked
+## While not necessary for evidence packaging (as only the inputs -> outputs need to be validated),
+## version tracking shared files (such as run scripts) will help tracking down differences
+shared = ["scripts/run_preprocess.sh",
+          "solver_settings.json",
+          "scripts/postprocess.sh",]
+
+#####    STEPS   #####
+#
+# Note: dynamic paths work using "injection" in which they are generated such that they are generated to refer to that
+#   particular's Step/Branch file. These are indicated by using a {<object>}. For example, to access an output from
+#   a different step named PreviousStep, you would use {steps.PreviousStep.outputs.<FILE>}.
+#
+#   To access folders in that step, you simply use no step name, e.g. $(outputs) refers to the outputs folder in that step
+# 
+#   Step dependencies are then calculated by inspecting for step outputs in other steps
+
+## Step 1: Preprocess
+[steps]
+[steps.Preprocess]
+    run_exe = "/bin/bash"
+    run_args = ["{shared}/scripts/preprocess.sh",    # {outputs} without {steps} indicates *this* step
+                "{variables.sleep_time}",            # {variables.<var_name>} puts in the exact value in the Design File
+                "{outputs}/subject.mesh"]
+
+## Step 2: Solver
+[steps.RunSolver]
+    run_exe = "/bin/bash"
+    run_args = ["{shared}/scripts/solve.sh",
+                "{steps.Preprocess.outputs}/subject.mesh",  # Dependency is auto-detected through the {steps.} template
+                "{shared}/solver_settings.json",
+                "{outputs}/results.json"]                   
+
+## Step 3: Postprocess
+[steps.Postprocess_stress]
+    run_exe = "/bin/bash"
+    run_args  = ["{shared}/scripts/postprocess_stress.sh",
+                "{steps.RunSolver.outputs}/output_RunSolver.json",
+                "{outputs}/report.md"] 
+
+

@@ -1,0 +1,19 @@
+[package]
+name = "actatools"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+ascii-dag = "0.8.3"
+base64 = "0.22.1"
+blake3 = "1.8.5"
+clap = { version = "4.5.56", features = ["cargo", "derive"] }
+polars = { version = "0.53.0", features = ["diagonal_concat"]}
+serde = "1.0.228"
+serde_json = "1.0.149"
+time = {version = "0.3.47", features = ["formatting", "serde"]}
+toml = {version = "0.9.11", features = ["serde"]}
+
+[profile.release]
+strip = true

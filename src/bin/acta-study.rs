@@ -1,5 +1,7 @@
 use actatools::execution::RunController;
+use actatools::status::render_status_step;
 use actatools::uid::{UidDigest, VarStepId};
+use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use std::io;
 use std::path::PathBuf;
@@ -94,7 +96,7 @@ struct InspectArgs {
     file: String,
 }
 
-fn main() {
+fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     // You can check for the existence of subcommands, and if found use their
@@ -106,7 +108,8 @@ fn main() {
                 .expect("Error reading Study Config");
 
             let mut out = io::stdout();
-            study_config.render_inspect_to_screen(&mut out).unwrap();
+            study_config.render_inspect_to_screen(&mut out)?;
+            Ok(())
         }
 
         Commands::Run(run_args) => {
@@ -132,6 +135,7 @@ fn main() {
                             .expect(&format!("Problem occured while running {vsr_uid}")),
                         None => println!("No VarSteps available to run"),
                     }
+                    Ok(())
                 }
 
                 RunCommands::Step(run_step_args) => {
@@ -143,21 +147,39 @@ fn main() {
                     let mut run_controller = RunController::new(&study_controller, &study_config)
                         .expect("Error making the Run Controller");
 
-                    let vsr_uid = VarStepId::from_str(&run_step_args.step_id).expect("Error converting string to VarStep");
+                    let vsr_uid = VarStepId::from_str(&run_step_args.step_id)
+                        .expect("Error converting string to VarStep");
 
-                    run_controller.run_vsr(vsr_uid).expect("An error occurred when running");
+                    run_controller
+                        .run_vsr(vsr_uid)?;
+                    Ok(())
                 }
 
-                RunCommands::Study => {}
+                RunCommands::Study => {todo!()}
 
-                RunCommands::Variation(VariationArgs) => {}
+                RunCommands::Variation(VariationArgs) => {todo!()}
             }
         }
         Commands::Status(status_args) => {
             let status_command = &status_args.command;
             match status_command {
                 StatusCommands::NextStep => todo!(),
-                StatusCommands::Step(step_args) => todo!(),
+                StatusCommands::Step(step_args) => {
+
+                    let vsr_uid = VarStepId::from_str(&step_args.step_id).expect("Problem extracting ID");
+                    let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
+                    let study_config = StudyConfiguration::from_config_path(&config_path)
+                        .expect("Error reading Study Config");
+                    let study_controller = StudyController::from_study_config(&study_config)
+                        .expect("Error making the Study Controller");
+                    let run_controller = RunController::new(&study_controller, &study_config)
+                        .expect("Error making the Run Controller");
+                    
+                    let mut out = io::stdout();
+                    render_status_step(&mut out, &study_controller, &run_controller, &vsr_uid)?;
+
+                    Ok(())
+                },
                 StatusCommands::Variation(variation_args) => todo!(),
                 StatusCommands::Study => todo!(),
             }

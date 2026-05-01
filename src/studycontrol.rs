@@ -169,10 +169,10 @@ impl StudyController {
 
                 // Store the upstream branches against the new VarStepId, convert each Branch into it's BrId, not
                 // a &Branch
-                let varstep_upstream_brids : Vec<BrId> = varstep_upstream_branches
-                .iter()
-                .map(|x| x.uid.clone())
-                .collect();
+                let varstep_upstream_brids: Vec<BrId> = varstep_upstream_branches
+                    .iter()
+                    .map(|x| x.uid.clone())
+                    .collect();
                 varstep_upstream_branches_map.insert(varstep_uid.clone(), varstep_upstream_brids);
 
                 // use only upstream branches as it should be less costly than the full Variation Branches

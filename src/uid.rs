@@ -54,7 +54,9 @@ impl std::str::FromStr for VarStepId {
     type Err = VarStepIdParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let hex = s.strip_prefix("vs").ok_or(VarStepIdParseError::MissingPrefix)?;
+        let hex = s
+            .strip_prefix("vs")
+            .ok_or(VarStepIdParseError::MissingPrefix)?;
         let id = hex
             .parse::<UidDigest<VARSTEPID_DIGEST_LEN>>()
             .map_err(VarStepIdParseError::InvalidDigest)?;

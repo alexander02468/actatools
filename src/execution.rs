@@ -338,7 +338,7 @@ impl Display for RunController {
 
 /// Simple status for VarSteps
 #[derive(Debug, Clone, Copy)]
-enum VarStepStatus {
+pub enum VarStepStatus {
     Uninitialized,
     NotRunning,
     Running,
@@ -369,8 +369,8 @@ pub struct VarStepRunner {
     status: VarStepStatus,
     run_dir: PathBuf,
     evidence_dir: PathBuf,
-    step_uid: String,
-    uid: VarStepId,
+    pub step_uid: String,
+    pub uid: VarStepId,
     run_exe_path: PathBuf,
     branches: Vec<Branch>,
     run_args: Vec<String>,
@@ -390,7 +390,7 @@ impl VarStepRunner {
     }
 
     /// Returns the status of the VarStepRunner. Fails if it cannot determine the status
-    fn check_status(&self) -> Result<VarStepStatus, Error> {
+    pub fn check_status(&self) -> Result<VarStepStatus, Error> {
         // Look for the file in the working directory under status.VARSTEPSTATUS
         // only look for the initialized states
         let statuses = vec![

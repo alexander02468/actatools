@@ -21,8 +21,7 @@ ActaTools consists of two separate binaries that can be used independently of ea
 
 ## Installation
 
-Binaries are pre-compiled for Linux, MacOSX, and Windows. Download the latest appropriate binary from [Dist], and
-copy it along your Path.
+Prebuilt binaries are published as assets on the GitHub Releases page.
 
 ### On Linux
 

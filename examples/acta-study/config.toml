@@ -54,7 +54,7 @@ shared = ["scripts/run_preprocess.sh",
 ## Step 3: Postprocess
 [steps.Postprocess_stress]
     run_exe = "/bin/bash"
-    run_args  = ["{shared}/scripts/postprocess_stress.sh",
+    run_args  = ["{shared}/scripts/postprocess.sh",
                 "{steps.RunSolver.outputs}/output_RunSolver.json",
                 "{outputs}/report.md"] 
 

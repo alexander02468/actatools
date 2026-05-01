@@ -1,6 +1,6 @@
-use actatools::execution::RunController;
+use actatools::execution::{RunController, run_continuous};
 use actatools::status::{render_status_step, render_status_variation, render_study};
-use actatools::uid::{UidDigest, VId, VarStepId};
+use actatools::uid::{VId, VarStepId};
 use anyhow::{Error, bail};
 use clap::{Args, Parser, Subcommand};
 use std::io;
@@ -155,11 +155,39 @@ fn main() -> Result<(), Error> {
                 }
 
                 RunCommands::Study => {
-                    todo!()
+                    // get all the vsrs in the study and try to run them continuously
+                    let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
+                    let study_config = StudyConfiguration::from_config_path(&config_path)
+                        .expect("Error reading Study Config");
+                    let study_controller = StudyController::from_study_config(&study_config)
+                        .expect("Error making the Study Controller");
+                    let mut run_controller = RunController::new(&study_controller, &study_config)
+                        .expect("Error making the Run Controller");
+                    
+                    let vsr_uids = study_controller.varsteps
+                        .iter()
+                        .map(|(x, _)| x.clone())
+                        .collect::<Vec<VarStepId>>();
+
+                    run_continuous(vsr_uids, &mut run_controller)?;
+
+                    Ok(())
                 }
 
-                RunCommands::Variation(VariationArgs) => {
-                    todo!()
+                RunCommands::Variation(variation_args) => {
+                    let variation_uid = VId::from_str(&variation_args.variation_id)
+                        .expect("Problem converting Id from string");
+                    let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
+                    let study_config = StudyConfiguration::from_config_path(&config_path)
+                        .expect("Error reading Study Config");
+                    let study_controller = StudyController::from_study_config(&study_config)
+                        .expect("Error making the Study Controller");
+                    let mut run_controller = RunController::new(&study_controller, &study_config)
+                        .expect("Error making the Run Controller");
+
+                    let vsr_uids = study_controller.varsteps_by_vid[&variation_uid].clone();
+                    run_continuous(vsr_uids, &mut run_controller)?;
+                    Ok(())
                 }
             }
         }
@@ -243,7 +271,7 @@ fn main() -> Result<(), Error> {
                     let mut out = io::stdout();
                     render_study(&mut out, &study_controller, &run_controller)?;
                     Ok(())
-                },
+                }
             }
         }
     }

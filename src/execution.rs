@@ -539,15 +539,13 @@ impl VarStepRunner {
         loop {
             match child_handle.try_wait() {
                 // Ok means it has exited
-                Ok(Some(status)) => {
+                Ok(Some(_status)) => {
                     self.change_status(VarStepStatus::Finished)?;
-                    dbg!(status);
                     break;
                 }
 
                 // Err means it is not exited
                 Ok(None) => {
-                    // dbg!("run blocking, running but waiting");
                     // check the current time
                     let cur_time = Instant::now();
                     if cur_time - last_time > heartbeat_interval {
@@ -562,7 +560,7 @@ impl VarStepRunner {
             }
         }
 
-        let mut f = File::create(run_dir.join("records.includes"))?;
+        let mut f = File::create(run_dir.join("record.includes"))?;
 
         // write out the variables and step information with comments
         let varstep_uid = self.uid.clone();
@@ -582,10 +580,10 @@ impl VarStepRunner {
 
         // read it back in
         let record_includes =
-            RecordIncludes::parse_includes_file(&run_dir.join("records.includes"))?;
+            RecordIncludes::parse_includes_file(&run_dir.join("record.includes"))?;
 
         let records = record_includes.into_record()?;
-        records.write_json(&run_dir.join("records.json"))?;
+        records.write_json(&run_dir.join("record.json"))?;
         Ok(())
     }
 
@@ -620,4 +618,60 @@ impl Display for VarStepRunner {
         write!(f, "{:18} {:20} {:10}", vsr_uid, self.step_uid, self.status)?;
         Ok(()) // width 10, left-aligned by default for strings
     }
+}
+
+/// The runs the vsrs subset continuously, making sure to check that
+pub fn run_continuous(
+    vsr_uids: Vec<VarStepId>,
+    run_control: &mut RunController,
+) -> Result<(), Error> {
+    // sort the vsrs according to the run order, assume they come in unordered
+    // convert to hashset, then simply retrieve them when going through the run order
+    let vsr_uids_to_run = vsr_uids.into_iter().collect::<HashSet<VarStepId>>();
+
+    // figure out how any need to be run
+    let mut num_to_run: usize = 0;
+    for varstep_uid in &vsr_uids_to_run {
+        match run_control.get_runner(&varstep_uid)?.check_status()? {
+            VarStepStatus::Uninitialized | VarStepStatus::NotRunning => num_to_run += 1,
+            _ => {}
+        }
+    }
+    println!("{num_to_run} steps need to be run");
+
+    // just run over the run_order, and if the VSR is in the vsr_uids and it's ready to run, run it
+    let mut finished = false;
+
+    // while they aren't finished, keep running
+    while !finished {
+        finished = true;
+        // loop through all the runs, if any are unfinished, switch the flag
+        for ord_vsr in run_control.run_order.clone() {
+
+            // basically use a lot of matches to have nested if statements
+            // Run if:
+            //  - inside the vsr_uids_to_run, otherwise skip, and
+            //  - it is not yet run, and
+            //  - dependencies are satisifed
+            // Not elegant but should perform reasonably
+            match vsr_uids_to_run.contains(&ord_vsr) {
+                true => {
+                    let vsr = run_control.get_runner(&ord_vsr)?;
+                    match vsr.check_status()? {
+                        VarStepStatus::Uninitialized | VarStepStatus::NotRunning => {
+                            // attempt to run it
+                            finished = false;
+                            match run_control.check_dependencies(&ord_vsr)? {
+                                VSRDependencyStatus::Ready => run_control.run_vsr(ord_vsr)?,
+                                VSRDependencyStatus::NotReady => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                false => {}
+            }
+        }
+    }
+    Ok(())
 }

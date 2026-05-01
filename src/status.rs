@@ -63,9 +63,12 @@ pub fn render_status_step<W: Write>(
 
 /// Prints the VSR + status compactly (1 line per VSR) --> useful for giving SLURM like overviews
 pub fn render_vsrs_compact<W: Write>(out: &mut W, vsrs: &Vec<&VarStepRunner>) -> Result<(), Error> {
-
     // write the header
-    writeln!(out, "  {:<18} {:<14.14} {}", "VarStepId", "Step Name", "Run Status")?;
+    writeln!(
+        out,
+        "  {:<18} {:<14.14} {}",
+        "VarStepId", "Step Name", "Run Status"
+    )?;
     writeln!(out, "----------------------------------------------------")?;
 
     for vsr in vsrs {
@@ -133,7 +136,6 @@ pub fn render_study<W: Write>(
     study_controller: &StudyController,
     run_controller: &RunController,
 ) -> Result<(), Error> {
-
     writeln!(out, "Variations")?;
     writeln!(out, "----------")?;
 

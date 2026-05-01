@@ -1,7 +1,7 @@
 use actatools::execution::RunController;
-use actatools::status::render_status_step;
-use actatools::uid::{UidDigest, VarStepId};
-use anyhow::Error;
+use actatools::status::{render_status_step, render_status_variation, render_study};
+use actatools::uid::{UidDigest, VId, VarStepId};
+use anyhow::{Error, bail};
 use clap::{Args, Parser, Subcommand};
 use std::io;
 use std::path::PathBuf;
@@ -150,23 +150,23 @@ fn main() -> Result<(), Error> {
                     let vsr_uid = VarStepId::from_str(&run_step_args.step_id)
                         .expect("Error converting string to VarStep");
 
-                    run_controller
-                        .run_vsr(vsr_uid)?;
+                    run_controller.run_vsr(vsr_uid)?;
                     Ok(())
                 }
 
-                RunCommands::Study => {todo!()}
+                RunCommands::Study => {
+                    todo!()
+                }
 
-                RunCommands::Variation(VariationArgs) => {todo!()}
+                RunCommands::Variation(VariationArgs) => {
+                    todo!()
+                }
             }
         }
         Commands::Status(status_args) => {
             let status_command = &status_args.command;
             match status_command {
-                StatusCommands::NextStep => todo!(),
-                StatusCommands::Step(step_args) => {
-
-                    let vsr_uid = VarStepId::from_str(&step_args.step_id).expect("Problem extracting ID");
+                StatusCommands::NextStep => {
                     let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
                     let study_config = StudyConfiguration::from_config_path(&config_path)
                         .expect("Error reading Study Config");
@@ -174,14 +174,76 @@ fn main() -> Result<(), Error> {
                         .expect("Error making the Study Controller");
                     let run_controller = RunController::new(&study_controller, &study_config)
                         .expect("Error making the Run Controller");
-                    
+
+                    let vsr_uid = run_controller.get_next_vsr()?;
+                    match vsr_uid {
+                        Some(vsr_uid) => {
+                            let mut out = io::stdout();
+                            render_status_step(
+                                &mut out,
+                                &study_controller,
+                                &run_controller,
+                                &vsr_uid,
+                            )?;
+                        }
+                        None => bail!("No VarSteps to run"),
+                    }
+
+                    Ok(())
+                }
+
+                StatusCommands::Step(step_args) => {
+                    let vsr_uid =
+                        VarStepId::from_str(&step_args.step_id).expect("Problem extracting ID");
+                    let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
+                    let study_config = StudyConfiguration::from_config_path(&config_path)
+                        .expect("Error reading Study Config");
+                    let study_controller = StudyController::from_study_config(&study_config)
+                        .expect("Error making the Study Controller");
+                    let run_controller = RunController::new(&study_controller, &study_config)
+                        .expect("Error making the Run Controller");
+
                     let mut out = io::stdout();
                     render_status_step(&mut out, &study_controller, &run_controller, &vsr_uid)?;
 
                     Ok(())
+                }
+                StatusCommands::Variation(variation_args) => {
+                    let variation_uid = VId::from_str(&variation_args.variation_id)
+                        .expect("Problem converting Id from string");
+
+                    let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
+                    let study_config = StudyConfiguration::from_config_path(&config_path)
+                        .expect("Error reading Study Config");
+                    let study_controller = StudyController::from_study_config(&study_config)
+                        .expect("Error making the Study Controller");
+                    let run_controller = RunController::new(&study_controller, &study_config)
+                        .expect("Error making the Run Controller");
+
+                    let mut out = io::stdout();
+                    render_status_variation(
+                        &mut out,
+                        &variation_uid,
+                        &study_controller,
+                        &run_controller,
+                    )?;
+
+                    Ok(())
+                }
+
+                StatusCommands::Study => {
+                    let config_path = PathBuf::from("config.toml"); // hard code for now, make an overrideable option in future
+                    let study_config = StudyConfiguration::from_config_path(&config_path)
+                        .expect("Error reading Study Config");
+                    let study_controller = StudyController::from_study_config(&study_config)
+                        .expect("Error making the Study Controller");
+                    let run_controller = RunController::new(&study_controller, &study_config)
+                        .expect("Error making the Run Controller");
+
+                    let mut out = io::stdout();
+                    render_study(&mut out, &study_controller, &run_controller)?;
+                    Ok(())
                 },
-                StatusCommands::Variation(variation_args) => todo!(),
-                StatusCommands::Study => todo!(),
             }
         }
     }

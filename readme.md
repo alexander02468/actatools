@@ -12,7 +12,7 @@ workflows with config-based setup, orchestration, study design, and BLAKE3 evide
 
 ## Binaries
 
-ActaTools consists of two separate services that can be used independently of each other.
+ActaTools consists of two separate binaries that can be used independently of each other.
 
 | Name             | Binary         | Primary Usage                                                         |
 |------------------|----------------|-----------------------------------------------------------------------|
@@ -29,7 +29,7 @@ copy it along your Path.
 On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`. For ActaRecords:
 
 ``` bash
-cp /release/0.2/acta-records ~/bin
+cp /dist/0.2/acta-records ~/bin
 ```
 
 You can check that ActaRecords is on your path by trying to see its version

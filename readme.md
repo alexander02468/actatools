@@ -1,7 +1,7 @@
 # ActaTools
 
-ActaTools is a set lightweight command-line tools for managing reproducible, traceable computational studies by scaffolding 
-workflows with config-based setup, orchestration, study designer, and BLAKE3 evidence bundling.
+ActaTools is a set of lightweight command-line tools for managing reproducible, and traceable computational studies by scaffolding 
+workflows with config-based setup, orchestration, study design, and BLAKE3 evidence bundling.
 
 ## Features
 
@@ -21,7 +21,7 @@ ActaTools consists of two separate services that can be used independently of ea
 
 ## Installation
 
-Binaries are pre-compiled for Linux, MacOSX, and Windows. Download the latest appropriate binary from [Release], and
+Binaries are pre-compiled for Linux, MacOSX, and Windows. Download the latest appropriate binary from [Dist], and
 copy it along your Path.
 
 ### On Linux
@@ -32,7 +32,7 @@ On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`. For Acta
 cp /release/0.2/acta-records ~/bin
 ```
 
-You can check that ActaTools is on your path by trying to see its version
+You can check that ActaRecords is on your path by trying to see its version
 
 ``` bash
 acta-study --version
@@ -40,11 +40,13 @@ acta-study --version
 
 ### On Windows
 
+Windows binaries are provided on a best-effort basis. They are built by CI and basic tests are run, but most development and support effort is focused on Linux.
+
 [Not yet implemented]
 
-## Example
+## Examples
 
-This section is designed as a Quick-Start guide. Please see the associated User Guide for more detailed documentation.
+This section is designed as a Quick-Start guide. Please see the associated Acta-Records or Acta-Study User Guide for more detailed documentation.
 
 ### ActaRecords - Evidence bundling, verification, and comparison
 
@@ -90,7 +92,7 @@ hash values are portable across filesystems and CPU architectures.
   ]
 ```
 
-The command `bundle` bundles the files in the Includes File into a folder. It also creates a Record in that folder
+The command `bundle` bundles the files referenced in the Includes File to a folder. It also creates a Record in that folder
 named `manifest.json`.
 
 ``` bash
@@ -105,10 +107,10 @@ The command `compare` compares two Records, aligning files and checking their ha
 acta-study compare record.json test/manifest.json
 ```
 
-This prints a summary of the comparison -- there should be no differences since they were recording identical data.
+This prints a summary of the comparison -- there should be no differences since recorded identical data.
 
-Lastly, you can `verify` an existing Record, which re-hashes all the files and creates a comparison report against the
-new Record.
+The command `verify` verifies an existing Record by re-hashing all the files and creating a comparison report against the
+new Record. This will expose file changes since the Record was originally recorded.
 
 ``` bash
 acta-study verify record.json
@@ -119,10 +121,10 @@ acta-study verify record.json
 ActaStudy is the tool designed to manage orchestration of studies through a TOML-based Configuration File. An example
 study can be found in `/examples/acta-study/`.
 
-Two main files that define a study:
+Two main files define a study:
 
 - *[Configuration File](/examples/acta-study/config.toml)* : TOML formatted. Defines global parameters and Steps. Step dependencies 
-and study variables are inferred in here as well.
+and study variables are inferred from this file.
 
 - *[Design File](/examples/acta-study/design.csv)* : CSV formatted. Defines the Study variables and their values. Each row corresponds
 to a Variation.
@@ -156,12 +158,28 @@ Directed Acyclic Graph
   [Postprocess_stress]
 ```
 
-
-
-The command `status` display information regarding either the Study `status study`, a Variation `status Variation <Variation Id>`
+The command `status` displays information regarding either the Study `status study`, a Variation `status Variation <Variation Id>`
 or a Step `status Step <Step Id>`.
 
-`status Study` is useful to see an overview of Variations and Steps along with their Ids.
+The subcommand `status study` is useful to see an overview of Variations and Steps along with their Ids and run status.
+
+``` bash
+Variations
+----------
+V1b42bb03936edb68
+  sleep_time "10"
+V03f41d5e9f2c560b
+  sleep_time "1.5"
+
+  VarStepId          Step Name      Run Status
+----------------------------------------------------
+  vs2d82b4a357a90634 RunSolver      Not-Initialized
+  vsa99d15d276a20b43 Postprocess_st Not-Initialized
+  vsd7f88979d321342c Preprocess     Not-Initialized
+  vs8e80463615a48d20 Postprocess_st Not-Initialized
+  vs789bff3b753fb971 RunSolver      Not-Initialized
+
+```
 
 The command `run` is used to execute a Step or a series of Steps continuously.
 

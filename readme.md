@@ -28,7 +28,7 @@ Prebuilt binaries are published as assets on the GitHub Releases page.
 On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`. For ActaRecords:
 
 ``` bash
-cp /dist/0.2/acta-records ~/bin
+cp acta-records ~/bin
 ```
 
 You can check that ActaRecords is on your path by trying to see its version

@@ -46,7 +46,7 @@ impl std::fmt::Display for VarStepId {
         Ok(())
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VarStepIdParseError {
     MissingPrefix,
     InvalidDigest(UidDigestParseError),
@@ -93,7 +93,7 @@ impl std::fmt::Display for VId {
         Ok(())
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VIdParseError {
     MissingPrefix,
     InvalidDigest(UidDigestParseError),
@@ -138,7 +138,7 @@ impl std::fmt::Display for BrId {
         Ok(())
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrIdParseError {
     MissingPrefix,
     InvalidDigest(UidDigestParseError),
@@ -475,5 +475,160 @@ mod test_uid_digest {
         let hex_str = "ad2adb0860fe83zz".to_string();
         let uid = UidDigest::<8>::from_str(&hex_str);
         assert_eq!(uid.unwrap_err(), UidDigestParseError::InvalidHex);
+    }
+}
+
+#[cfg(test)]
+mod test_br_uid {
+
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_construction() {
+        let hex_str = "ad2adb0860fe8343";
+        let uid = UidDigest::<8>::from_str(hex_str).unwrap();
+        let br_id = BrId { id: uid };
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        assert_eq!(br_id.id, UidDigest { id: u8_arr });
+    }
+
+    #[test]
+    fn test_construction_from_str() {
+        let br_id = BrId::from_str("Brad2adb0860fe8343").unwrap();
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        assert_eq!(br_id.id, UidDigest { id: u8_arr });
+    }
+
+    #[test]
+    fn test_construction_from_str_bad_prefix() {
+        let br_id = BrId::from_str("Vrad2adb0860fe8343");
+
+        assert_eq!(br_id.unwrap_err(), BrIdParseError::MissingPrefix);
+    }
+
+    #[test]
+    fn test_construction_from_str_wrong_size() {
+        let size: usize = (BRID_DIGEST_LEN - 1)*2;
+        // need size + 2 b/c of the extra Br prefix
+        let str = "Brad2adb0860fe8343ad2adb0860fe8343"[..size+2].to_string();
+        let br_id = BrId::from_str(&str);
+        assert_eq!(
+            br_id.unwrap_err(),
+            BrIdParseError::InvalidDigest(UidDigestParseError::InvalidLength {
+                expected: BRID_DIGEST_LEN * 2,
+                actual: (BRID_DIGEST_LEN - 1) * 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_construction_from_str_bad_hex() {
+        let br_id = BrId::from_str("Brad2adb0860fe83zz");
+        assert_eq!(br_id.unwrap_err(), BrIdParseError::InvalidDigest(UidDigestParseError::InvalidHex));
+    }
+}
+
+
+#[cfg(test)]
+mod test_vid_uid {
+
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_construction() {
+        let hex_str = "ad2adb0860fe8343";
+        let uid = UidDigest::<8>::from_str(hex_str).unwrap();
+        let vid_id = VId { id: uid };
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        assert_eq!(vid_id.id, UidDigest { id: u8_arr });
+    }
+
+    #[test]
+    fn test_construction_from_str() {
+        let vid_id = VId::from_str("Vad2adb0860fe8343").unwrap();
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        assert_eq!(vid_id.id, UidDigest { id: u8_arr });
+    }
+
+    #[test]
+    fn test_construction_from_str_bad_prefix() {
+        let vid_id = VId::from_str("Brad2adb0860fe8343");
+
+        assert_eq!(vid_id.unwrap_err(), VIdParseError::MissingPrefix);
+    }
+
+    #[test]
+    fn test_construction_from_str_wrong_size() {
+        let size: usize = (VID_DIGEST_LEN - 1)*2;
+        // need size + 1 b/c of the extra Vid prefix
+        let str = "Vad2adb0860fe8343ad2adb0860fe8343"[..size+1].to_string();
+        let vid = VId::from_str(&str);
+        assert_eq!(
+            vid.unwrap_err(),
+            VIdParseError::InvalidDigest(UidDigestParseError::InvalidLength {
+                expected: VID_DIGEST_LEN * 2,
+                actual: (VID_DIGEST_LEN - 1) * 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_construction_from_str_bad_hex() {
+        let vid = VId::from_str("Vad2adb0860fe83zz");
+        assert_eq!(vid.unwrap_err(), VIdParseError::InvalidDigest(UidDigestParseError::InvalidHex));
+    }
+}
+
+/// Tests for the VarStep Uid
+#[cfg(test)]
+mod test_vs_uid {
+
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_construction() {
+        let hex_str = "ad2adb0860fe8343";
+        let uid = UidDigest::<8>::from_str(hex_str).unwrap();
+        let vsid_id = VarStepId { id: uid };
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        assert_eq!(vsid_id.id, UidDigest { id: u8_arr });
+    }
+
+    #[test]
+    fn test_construction_from_str() {
+        let vs_id = VarStepId::from_str("vsad2adb0860fe8343").unwrap();
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        assert_eq!(vs_id.id, UidDigest { id: u8_arr });
+    }
+
+    #[test]
+    fn test_construction_from_str_bad_prefix() {
+        let vs_id = VarStepId::from_str("Brad2adb0860fe8343");
+
+        assert_eq!(vs_id.unwrap_err(), VarStepIdParseError::MissingPrefix);
+    }
+
+    #[test]
+    fn test_construction_from_str_wrong_size() {
+        let size: usize = (VARSTEPID_DIGEST_LEN - 1)*2;
+        // need size + 2 b/c of the extra vs prefix
+        let str = "vsad2adb0860fe8343ad2adb0860fe8343"[..size+2].to_string();
+        let vs_id = VarStepId::from_str(&str);
+        assert_eq!(
+            vs_id.unwrap_err(),
+            VarStepIdParseError::InvalidDigest(UidDigestParseError::InvalidLength {
+                expected: VARSTEPID_DIGEST_LEN * 2,
+                actual: (VARSTEPID_DIGEST_LEN - 1) * 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_construction_from_str_bad_hex() {
+        let vs_id = VarStepId::from_str("vsad2adb0860fe83zz");
+        assert_eq!(vs_id.unwrap_err(), VarStepIdParseError::InvalidDigest(UidDigestParseError::InvalidHex));
     }
 }

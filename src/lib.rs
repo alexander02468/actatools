@@ -1,6 +1,7 @@
 pub mod configparsing;
 pub mod conversion;
 pub mod execution;
+pub mod paths;
 pub mod recordcomparison;
 pub mod records;
 pub mod status;

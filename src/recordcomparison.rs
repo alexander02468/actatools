@@ -6,6 +6,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 
+use anyhow::Error;
+
 use crate::records::{HashedRecordEntry, Record};
 
 pub struct MatchEngine {
@@ -109,6 +111,8 @@ impl std::fmt::Display for ExtractedKey {
         }
     }
 }
+
+/// Use the Filename as the extraction
 #[derive(Debug, Clone)]
 pub struct KeyExtractFilename;
 impl KeyExtractStrategy for KeyExtractFilename {
@@ -116,6 +120,7 @@ impl KeyExtractStrategy for KeyExtractFilename {
         let k = record_entry
             .file
             .get_path()
+            .ok()?
             .file_name()
             .map(|x| x.to_string_lossy().to_string());
         k.map(|x| ExtractedKey::Filename(x))
@@ -300,29 +305,39 @@ pub struct Render {
 }
 
 impl Render {
-    pub fn render_to_screen<'a, W: Write>(&self, record_diffs: &Vec<RecordDiff<'a>>, out: &mut W) {
+    pub fn render_to_screen<'a, W: Write>(
+        &self,
+        record_diffs: &Vec<RecordDiff<'a>>,
+        out: &mut W,
+    ) -> Result<(), Error> {
         let difference_summary = DifferenceSummary::from_record_diffs(record_diffs);
-        self.render_header(out);
-        self.render_summary(out, &difference_summary);
-        self.render_legend(out);
-        self.render_results(out, record_diffs);
+        self.render_header(out)?;
+        self.render_summary(out, &difference_summary)?;
+        self.render_legend(out)?;
+        self.render_results(out, record_diffs)?;
+        Ok(())
     }
 
-    fn render_header<W: Write>(&self, out: &mut W) {
-        writeln!(out, "Record comparison").unwrap();
-        writeln!(out, "=================").unwrap();
-        writeln!(out).unwrap();
+    fn render_header<W: Write>(&self, out: &mut W) -> Result<(), Error> {
+        writeln!(out, "Record comparison")?;
+        writeln!(out, "=================")?;
+        writeln!(out)?;
 
-        writeln!(out, "Inputs").unwrap();
-        writeln!(out, "------").unwrap();
-        writeln!(out).unwrap();
+        writeln!(out, "Inputs")?;
+        writeln!(out, "------")?;
+        writeln!(out)?;
 
-        writeln!(out, "input1: {}", &self.input1_label).unwrap();
-        writeln!(out, "input2: {}", &self.input2_label).unwrap();
-        writeln!(out).unwrap();
+        writeln!(out, "input1: {}", &self.input1_label)?;
+        writeln!(out, "input2: {}", &self.input2_label)?;
+        writeln!(out)?;
+        Ok(())
     }
 
-    fn render_summary<W: Write>(&self, out: &mut W, counts: &DifferenceSummary) {
+    fn render_summary<W: Write>(
+        &self,
+        out: &mut W,
+        counts: &DifferenceSummary,
+    ) -> Result<(), Error> {
         let total = counts.num_same
             + counts.num_changed
             + counts.num_added
@@ -330,80 +345,81 @@ impl Render {
             + counts.num_undetermined_before
             + counts.num_undetermined_after;
 
-        writeln!(out, "Summary").unwrap();
-        writeln!(out, "-------").unwrap();
-        writeln!(out).unwrap();
+        writeln!(out, "Summary")?;
+        writeln!(out, "-------")?;
+        writeln!(out)?;
 
-        writeln!(out, "  =  Same           {:>5}", counts.num_same).unwrap();
-        writeln!(out, "  ~  Changed        {:>5}", counts.num_changed).unwrap();
-        writeln!(out, "  +  Added          {:>5}", counts.num_added).unwrap();
-        writeln!(out, "  -  Removed        {:>5}", counts.num_removed).unwrap();
+        writeln!(out, "  =  Same           {:>5}", counts.num_same)?;
+        writeln!(out, "  ~  Changed        {:>5}", counts.num_changed)?;
+        writeln!(out, "  +  Added          {:>5}", counts.num_added)?;
+        writeln!(out, "  -  Removed        {:>5}", counts.num_removed)?;
         writeln!(
             out,
             "  !  Undetermined   {:>5}",
             counts.num_undetermined_before
-        )
-        .unwrap();
+        )?;
         writeln!(
             out,
             "  !  Undetermined   {:>5}",
             counts.num_undetermined_after
-        )
-        .unwrap();
+        )?;
 
-        writeln!(out, "  -----------------------").unwrap();
-        writeln!(out, "     Total          {:>5}", total).unwrap();
-        writeln!(out).unwrap();
+        writeln!(out, "  -----------------------")?;
+        writeln!(out, "     Total          {:>5}", total)?;
+        writeln!(out)?;
+
+        Ok(())
     }
 
-    fn render_legend<W: Write>(&self, out: &mut W) {
-        writeln!(out, "Legend").unwrap();
-        writeln!(out, "------").unwrap();
-        writeln!(out).unwrap();
+    fn render_legend<W: Write>(&self, out: &mut W) -> Result<(), Error> {
+        writeln!(out, "Legend")?;
+        writeln!(out, "------")?;
+        writeln!(out)?;
         writeln!(
             out,
             "  =  Same           record matched and digest is unchanged"
-        )
-        .unwrap();
-        writeln!(out, "  ~  Changed        record matched but digest changed").unwrap();
-        writeln!(out, "  +  Added          record exists only in input2").unwrap();
-        writeln!(out, "  -  Removed        record exists only in input1").unwrap();
+        )?;
+        writeln!(out, "  ~  Changed        record matched but digest changed")?;
+        writeln!(out, "  +  Added          record exists only in input2")?;
+        writeln!(out, "  -  Removed        record exists only in input1")?;
         writeln!(
             out,
             "  !  Undetermined   matcher could not safely pair records"
-        )
-        .unwrap();
+        )?;
 
-        writeln!(out).unwrap();
+        writeln!(out)?;
+
+        Ok(())
     }
 
-    fn render_results<W: Write>(&self, out: &mut W, diffs: &[RecordDiff<'_>]) {
-        writeln!(out, "Results").unwrap();
-        writeln!(out, "-------").unwrap();
-        writeln!(out).unwrap();
+    fn render_results<W: Write>(&self, out: &mut W, diffs: &[RecordDiff<'_>]) -> Result<(), Error> {
+        writeln!(out, "Results")?;
+        writeln!(out, "-------")?;
+        writeln!(out)?;
 
         for (index, diff) in diffs.iter().enumerate() {
             let number = index + 1;
 
             match diff {
                 RecordDiff::NoChange { before, after, key } => {
-                    Self::render_no_change(out, number, before, after, key);
+                    Self::render_no_change(out, number, before, after, key)?;
                 }
                 RecordDiff::HashChange { before, after, key } => {
-                    Self::render_hash_change(out, number, before, after, key);
+                    Self::render_hash_change(out, number, before, after, key)?;
                 }
                 RecordDiff::Added { after, key } => {
-                    Self::render_added(out, number, after, key);
+                    Self::render_added(out, number, after, key)?;
                 }
                 RecordDiff::Removed { before, key } => {
-                    Self::render_removed(out, number, before, key);
+                    Self::render_removed(out, number, before, key)?;
                 }
                 RecordDiff::Undetermined { before, after, key } => {
-                    Self::render_undetermined(out, number, before, after, key);
+                    Self::render_undetermined(out, number, before, after, key)?;
                 }
             }
-            writeln!(out).unwrap();
+            writeln!(out)?;
         }
+        Ok(())
     }
 
     fn render_no_change<W: Write>(
@@ -412,22 +428,21 @@ impl Render {
         before: &HashedRecordEntry,
         after: &HashedRecordEntry,
         key: &ExtractedKey,
-    ) {
-        writeln!(out, "[{:04}] = SAME", number).unwrap();
-        writeln!(out, "  key:        {}", key).unwrap();
+    ) -> Result<(), Error> {
+        writeln!(out, "[{:04}] = SAME", number)?;
+        writeln!(out, "  key:        {}", key)?;
         writeln!(
             out,
             "  input1:     {}",
-            before.file.get_path_compact().display()
-        )
-        .unwrap();
+            before.file.get_path_compact()?.display()
+        )?;
         writeln!(
             out,
             "  input2:     {}",
-            after.file.get_path_compact().display()
-        )
-        .unwrap();
-        writeln!(out, "  digest:     {}", before.digest).unwrap();
+            after.file.get_path_compact()?.display()
+        )?;
+        writeln!(out, "  digest:     {}", before.digest)?;
+        Ok(())
     }
 
     fn render_hash_change<W: Write>(
@@ -436,22 +451,21 @@ impl Render {
         before: &HashedRecordEntry,
         after: &HashedRecordEntry,
         key: &ExtractedKey,
-    ) {
-        writeln!(out, "[{:04}] ~ CHANGED", number).unwrap();
-        writeln!(out, "  key:        {}", key).unwrap();
+    ) -> Result<(), Error> {
+        writeln!(out, "[{:04}] ~ CHANGED", number)?;
+        writeln!(out, "  key:        {}", key)?;
         writeln!(
             out,
             "  input1:     {}",
-            before.file.get_path_compact().display()
-        )
-        .unwrap();
+            before.file.get_path_compact()?.display()
+        )?;
         writeln!(
             out,
             "  input2:     {}",
-            after.file.get_path_compact().display()
-        )
-        .unwrap();
-        writeln!(out, "  digest:     {} -> {}", before.digest, after.digest).unwrap();
+            after.file.get_path_compact()?.display()
+        )?;
+        writeln!(out, "  digest:     {} -> {}", before.digest, after.digest)?;
+        Ok(())
     }
 
     fn render_added<W: Write>(
@@ -459,16 +473,17 @@ impl Render {
         number: usize,
         after: &HashedRecordEntry,
         key: &ExtractedKey,
-    ) {
-        writeln!(out, "[{:04}] + ADDED", number).unwrap();
-        writeln!(out, "  key:        {}", key).unwrap();
+    ) -> Result<(), Error> {
+        writeln!(out, "[{:04}] + ADDED", number)?;
+        writeln!(out, "  key:        {}", key)?;
         writeln!(
             out,
             "  input2:     {}",
-            after.file.get_path_compact().display()
-        )
-        .unwrap();
-        writeln!(out, "  digest:     {}", after.digest).unwrap();
+            after.file.get_path_compact()?.display()
+        )?;
+        writeln!(out, "  digest:     {}", after.digest)?;
+
+        Ok(())
     }
 
     fn render_removed<W: Write>(
@@ -476,16 +491,16 @@ impl Render {
         number: usize,
         before: &HashedRecordEntry,
         key: &ExtractedKey,
-    ) {
-        writeln!(out, "[{:04}] - REMOVED", number).unwrap();
-        writeln!(out, "  key:        {}", key).unwrap();
+    ) -> Result<(), Error> {
+        writeln!(out, "[{:04}] - REMOVED", number)?;
+        writeln!(out, "  key:        {}", key)?;
         writeln!(
             out,
             "  input1:     {}",
-            before.file.get_path_compact().display()
-        )
-        .unwrap();
-        writeln!(out, "  digest:     {}", before.digest).unwrap();
+            before.file.get_path_compact()?.display()
+        )?;
+        writeln!(out, "  digest:     {}", before.digest)?;
+        Ok(())
     }
 
     fn render_undetermined<W: Write>(
@@ -494,35 +509,33 @@ impl Render {
         before: &[&HashedRecordEntry],
         after: &[&HashedRecordEntry],
         key: &ExtractedKey,
-    ) {
-        writeln!(out, "[{:04}] ! UNDETERMINED", number).unwrap();
-        writeln!(out, "  key:        {}", key).unwrap();
+    ) -> Result<(), Error> {
+        writeln!(out, "[{:04}] ! UNDETERMINED", number)?;
+        writeln!(out, "  key:        {}", key)?;
         writeln!(
             out,
             "  reason:     multiple input1 and input2 records share this key"
-        )
-        .unwrap();
+        )?;
 
-        writeln!(out, "  input1 candidates:").unwrap();
+        writeln!(out, "  input1 candidates:")?;
         for candidate in before {
             writeln!(
                 out,
                 "    - {}    digest: {}",
-                candidate.file.get_path().display(),
+                candidate.file.get_path()?.display(),
                 candidate.digest
-            )
-            .unwrap();
+            )?;
         }
 
-        writeln!(out, "  input2 candidates:").unwrap();
+        writeln!(out, "  input2 candidates:")?;
         for candidate in after {
             writeln!(
                 out,
                 "    - {}    digest: {}",
-                candidate.file.get_path().display(),
+                candidate.file.get_path()?.display(),
                 candidate.digest
-            )
-            .unwrap();
+            )?;
         }
+        Ok(())
     }
 }

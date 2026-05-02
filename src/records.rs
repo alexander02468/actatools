@@ -11,14 +11,31 @@ use std::{
 };
 
 use anyhow::{Error, anyhow};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+use crate::paths::{Directory, FilePath};
 use crate::uid::UidDigest;
 
 const RECORD_ENTRY_LEN: usize = 32;
 
 const JSON_RECORD_FORMAT_VERSION: usize = 1;
+
+/// Error relating to records: RecordIncludes and Record
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordError {
+    AddIncludePathError(String),
+}
+
+impl std::fmt::Display for RecordError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RecordError::AddIncludePathError(s) => write!(f, "Unable to add path {}", s),
+        }
+    }
+}
+
+impl std::error::Error for RecordError {}
 
 /// Holds the parsed data in the record.includes file. Can be thought of a constructor template for a Record
 /// (which has the files hashed as well)
@@ -28,38 +45,41 @@ pub struct RecordIncludes {
 }
 
 impl RecordIncludes {
-    /// Parses an entire IncludesFile to make a RecordIncludes
-    pub fn parse_includes_file(includes_file: &Path) -> Result<Self, Error> {
-        let f = File::open(includes_file)?;
+    pub fn new() -> Self {
+        let record_entries: Vec<UnhashedRecordEntry> = Vec::new();
+        Self { record_entries }
+    }
+
+    /// Adds an include by filepath to the exsting RecordIncludes.
+    /// An optional relative base path allows for filepaths relative to different folders
+    pub fn add_include(&mut self, file: FilePath) -> Result<(), RecordError> {
+        let new_record_entry = UnhashedRecordEntry { file };
+        self.record_entries.push(new_record_entry);
+        Ok(())
+    }
+
+    /// Extends the current includes with the files in an entire IncludesFile
+    pub fn extend_includes_file(&mut self, includes_file: &FilePath) -> Result<(), Error> {
+        let f = File::open(includes_file.get_path()?)?;
         let reader = BufReader::new(f);
 
-        let mut record_entries: Vec<UnhashedRecordEntry> = Vec::new();
+        let base_dir = Directory::new(includes_file.get_base_dir_path()?)?;
 
+        // Loop through each line, extract an incomplete string (via parse_line) and then complete with the base_dir
+        // before added it into record_entries
         for line in reader.lines() {
             let line = line?; // String
-            match Self::parse_line(&line)? {
-                Some(incomplete_file) => {
-                    let complete_file = incomplete_file.complete(
-                        &includes_file
-                            .parent()
-                            .ok_or_else(|| {
-                                anyhow!("Unable to access parent directory, is this a file?")
-                            })?
-                            .to_path_buf(),
-                    );
-                    record_entries.push(UnhashedRecordEntry {
-                        file: complete_file,
-                    });
-                }
-
-                None => {}
-            }
+            Self::parse_line(&line)?.map(|x| {
+                self.record_entries.push(UnhashedRecordEntry {
+                    file: x.into_complete(base_dir.clone()),
+                })
+            });
         }
-        Ok(Self { record_entries })
+        Ok(())
     }
 
     /// Parses a single line to get the path
-    fn parse_line(line_string: &str) -> Result<Option<FilePathIncomplete>, Error> {
+    fn parse_line(line_string: &str) -> Result<Option<FilePath>, Error> {
         let strsplit = line_string.trim().split_once('#');
 
         let clean = match strsplit {
@@ -71,7 +91,7 @@ impl RecordIncludes {
             return Ok(None);
         } else {
             let path_buf = PathBuf::from_str(clean)?;
-            return Ok(Some(FilePathIncomplete::new(&path_buf)));
+            return Ok(Some(FilePath::RelativeIncomplete(path_buf)));
         }
     }
 
@@ -103,82 +123,6 @@ impl RecordIncludes {
     }
 }
 
-/// Stores incomplete file paths, need to add a base path
-#[derive(Debug, Clone, Serialize)]
-pub enum FilePathIncomplete {
-    Absolute(PathBuf),
-    RelativeNeedsContext(PathBuf),
-}
-impl FilePathIncomplete {
-    pub fn new(path: &Path) -> Self {
-        match path.is_absolute() {
-            true => Self::Absolute(path.to_path_buf()),
-            false => Self::RelativeNeedsContext(path.to_path_buf()),
-        }
-    }
-
-    pub fn complete(self, base_path: &Path) -> FilePath {
-        match self {
-            FilePathIncomplete::Absolute(path_buf) => FilePath::Absolute(path_buf),
-            FilePathIncomplete::RelativeNeedsContext(path_buf) => FilePath::Relative {
-                base: base_path.to_path_buf(),
-                relative: path_buf,
-            },
-        }
-    }
-}
-
-/// Stores a complete filepath
-#[derive(Debug, Clone)]
-pub enum FilePath {
-    Absolute(PathBuf),
-    Relative { base: PathBuf, relative: PathBuf },
-}
-impl FilePath {
-    /// Gets the full path
-    pub fn get_path(&self) -> PathBuf {
-        match self {
-            FilePath::Absolute(path_buf) => path_buf.to_path_buf(),
-            FilePath::Relative { base, relative } => base.join(relative).to_path_buf(),
-        }
-    }
-    /// If absolute, gets the full path. Otherwise, returns the relative. More useful as a Record Artifact
-    pub fn get_path_compact(&self) -> PathBuf {
-        match self {
-            FilePath::Absolute(path_buf) => path_buf.to_path_buf(),
-            FilePath::Relative { base: _, relative } => relative.to_path_buf(),
-        }
-    }
-}
-
-impl Serialize for FilePath {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.get_path_compact().to_string_lossy().to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for FilePath {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let raw = String::deserialize(deserializer)?;
-        let path = PathBuf::from(raw);
-        if path.is_absolute() {
-            Ok(FilePath::Absolute(path))
-        } else {
-            // this is dirty but leave the base empty. Needs to be filled in immediately
-            Ok(FilePath::Relative {
-                base: PathBuf::from(""),
-                relative: path,
-            })
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnhashedRecordEntry {
     file: FilePath,
@@ -186,7 +130,7 @@ pub struct UnhashedRecordEntry {
 impl UnhashedRecordEntry {
     /// Use the hasher to hash the file it is pointing at. Necessary for making a HashedRecordEntry
     fn hash(&self) -> Result<UidDigest<RECORD_ENTRY_LEN>, Error> {
-        let f = File::open(&self.file.get_path())?;
+        let f = File::open(&self.file.get_path()?)?;
         let mut hasher = blake3::Hasher::new();
         let mut reader = BufReader::new(f);
         let mut buffer = [0u8; 64 * 1024];
@@ -228,12 +172,20 @@ pub struct Record {
 }
 
 impl Record {
+    pub fn render_to<W: Write>(&self, out: &mut W) -> Result<(), Error> {
+        let json_self_string = self.as_json_string()?;
+        write!(out, "{json_self_string}")?;
+        writeln!(out, "")?;
+        out.flush()?;
+
+        Ok(())
+    }
+
     /// Writes a JSON by converting to String then writing out
     pub fn write_json(&self, f_path: &Path) -> Result<(), Error> {
         let mut f = File::create(f_path)?;
 
-        let json_self_string = self.as_json_string()?;
-        write!(f, "{json_self_string}")?;
+        self.render_to(&mut f)?;
         Ok(())
     }
 
@@ -243,7 +195,7 @@ impl Record {
     }
 
     /// Loads a JSON using Deserialize
-    pub fn load_json(path: &str) -> Result<Self, Error> {
+    pub fn load_json(path: &Path) -> Result<Self, Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let record_file = serde_json::from_reader(reader)?;
@@ -253,21 +205,18 @@ impl Record {
 
     /// Uses the Record to pull out filepaths and recalculate a new Record. Used in verification
     /// of an existing record
-    pub fn recalculate_record(&self, record_base_path: &Path) -> Result<Record, Error> {
+    pub fn recalculate_record(&self, base_dir: Directory) -> Result<Record, Error> {
         let mut new_record_entries: Vec<UnhashedRecordEntry> =
             Vec::with_capacity(self.record_entries.len());
 
-        for existing_record_entry in &self.record_entries {
-            // we need to check what the old file was and inject the new location if filepath is not absolute
-            let new_filepath = match &existing_record_entry.file {
-                FilePath::Absolute(path_buf) => FilePath::Absolute(path_buf.clone()),
-                FilePath::Relative { base: _, relative } => FilePath::Relative {
-                    base: record_base_path.to_path_buf(),
-                    relative: relative.clone(),
-                },
-            };
-
-            let new_record_entry = UnhashedRecordEntry { file: new_filepath };
+        // loop through each existing record, complete the FilePath if needed and added a new unhashed version to
+        // to the record_includes
+        for old_record_entry in &self.record_entries {
+            let file = old_record_entry
+                .file
+                .clone()
+                .into_complete(base_dir.clone());
+            let new_record_entry = UnhashedRecordEntry { file };
             new_record_entries.push(new_record_entry);
         }
 
@@ -317,27 +266,38 @@ pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Resul
     for unhashed_record_entry in record_includes.record_entries {
         let file_from_name = unhashed_record_entry
             .file
-            .get_path()
+            .get_path()?
             .file_name()
             .ok_or_else(|| {
                 anyhow!(
                     "Unable to get filename from {}",
-                    unhashed_record_entry.file.get_path().to_string_lossy()
+                    unhashed_record_entry
+                        .file
+                        .get_path()
+                        .unwrap()
+                        .to_string_lossy() //file.get_path is already checked, unwrap is ok
                 )
             })?
             .to_string_lossy()
             .to_string();
         writeln!(f_includes, "{file_from_name}")?;
-        let file_from = &unhashed_record_entry.file.get_path();
+        let file_from = &unhashed_record_entry.file.get_path()?;
         let file_to = &output_dir.join(file_from_name);
 
         std::fs::copy(file_from, file_to)?;
     }
 
+    let includes_path = FilePath::Relative {
+        base_dir: Directory::here(),
+        relative: output_dir.join("manifest.includes"),
+    };
+
     // use the new record_includes to make a manifest.json
-    let record_includes =
-        RecordIncludes::parse_includes_file(&output_dir.join("manifest.includes"))?;
+    let mut record_includes = RecordIncludes::new();
+    record_includes.extend_includes_file(&includes_path)?;
     let record = record_includes.into_record()?;
+
     record.write_json(&output_dir.join("manifest.json"))?;
+
     Ok(())
 }

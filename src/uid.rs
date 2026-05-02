@@ -509,9 +509,9 @@ mod test_br_uid {
 
     #[test]
     fn test_construction_from_str_wrong_size() {
-        let size: usize = (BRID_DIGEST_LEN - 1)*2;
+        let size: usize = (BRID_DIGEST_LEN - 1) * 2;
         // need size + 2 b/c of the extra Br prefix
-        let str = "Brad2adb0860fe8343ad2adb0860fe8343"[..size+2].to_string();
+        let str = "Brad2adb0860fe8343ad2adb0860fe8343"[..size + 2].to_string();
         let br_id = BrId::from_str(&str);
         assert_eq!(
             br_id.unwrap_err(),
@@ -525,10 +525,12 @@ mod test_br_uid {
     #[test]
     fn test_construction_from_str_bad_hex() {
         let br_id = BrId::from_str("Brad2adb0860fe83zz");
-        assert_eq!(br_id.unwrap_err(), BrIdParseError::InvalidDigest(UidDigestParseError::InvalidHex));
+        assert_eq!(
+            br_id.unwrap_err(),
+            BrIdParseError::InvalidDigest(UidDigestParseError::InvalidHex)
+        );
     }
 }
-
 
 #[cfg(test)]
 mod test_vid_uid {
@@ -561,9 +563,9 @@ mod test_vid_uid {
 
     #[test]
     fn test_construction_from_str_wrong_size() {
-        let size: usize = (VID_DIGEST_LEN - 1)*2;
+        let size: usize = (VID_DIGEST_LEN - 1) * 2;
         // need size + 1 b/c of the extra Vid prefix
-        let str = "Vad2adb0860fe8343ad2adb0860fe8343"[..size+1].to_string();
+        let str = "Vad2adb0860fe8343ad2adb0860fe8343"[..size + 1].to_string();
         let vid = VId::from_str(&str);
         assert_eq!(
             vid.unwrap_err(),
@@ -577,7 +579,10 @@ mod test_vid_uid {
     #[test]
     fn test_construction_from_str_bad_hex() {
         let vid = VId::from_str("Vad2adb0860fe83zz");
-        assert_eq!(vid.unwrap_err(), VIdParseError::InvalidDigest(UidDigestParseError::InvalidHex));
+        assert_eq!(
+            vid.unwrap_err(),
+            VIdParseError::InvalidDigest(UidDigestParseError::InvalidHex)
+        );
     }
 }
 
@@ -613,9 +618,9 @@ mod test_vs_uid {
 
     #[test]
     fn test_construction_from_str_wrong_size() {
-        let size: usize = (VARSTEPID_DIGEST_LEN - 1)*2;
+        let size: usize = (VARSTEPID_DIGEST_LEN - 1) * 2;
         // need size + 2 b/c of the extra vs prefix
-        let str = "vsad2adb0860fe8343ad2adb0860fe8343"[..size+2].to_string();
+        let str = "vsad2adb0860fe8343ad2adb0860fe8343"[..size + 2].to_string();
         let vs_id = VarStepId::from_str(&str);
         assert_eq!(
             vs_id.unwrap_err(),
@@ -629,6 +634,9 @@ mod test_vs_uid {
     #[test]
     fn test_construction_from_str_bad_hex() {
         let vs_id = VarStepId::from_str("vsad2adb0860fe83zz");
-        assert_eq!(vs_id.unwrap_err(), VarStepIdParseError::InvalidDigest(UidDigestParseError::InvalidHex));
+        assert_eq!(
+            vs_id.unwrap_err(),
+            VarStepIdParseError::InvalidDigest(UidDigestParseError::InvalidHex)
+        );
     }
 }

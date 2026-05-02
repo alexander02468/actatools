@@ -647,7 +647,6 @@ pub fn run_continuous(
         finished = true;
         // loop through all the runs, if any are unfinished, switch the flag
         for ord_vsr in run_control.run_order.clone() {
-
             // basically use a lot of matches to have nested if statements
             // Run if:
             //  - inside the vsr_uids_to_run, otherwise skip, and

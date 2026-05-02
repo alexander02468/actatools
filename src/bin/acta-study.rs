@@ -163,8 +163,9 @@ fn main() -> Result<(), Error> {
                         .expect("Error making the Study Controller");
                     let mut run_controller = RunController::new(&study_controller, &study_config)
                         .expect("Error making the Run Controller");
-                    
-                    let vsr_uids = study_controller.varsteps
+
+                    let vsr_uids = study_controller
+                        .varsteps
                         .iter()
                         .map(|(x, _)| x.clone())
                         .collect::<Vec<VarStepId>>();

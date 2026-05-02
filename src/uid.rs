@@ -1,7 +1,9 @@
 // Copyright (C) 2026 Alexander Baker
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use anyhow::Error;
+use std::collections::HashSet;
+
+use anyhow::{Error, bail};
 use polars::prelude::Scalar;
 use serde::{
     Deserialize, Deserializer, Serialize,
@@ -187,7 +189,7 @@ impl<const N: usize> UidDigest<N> {
     }
 
     /// Creates a Uid12 from a Hashmap, usually inputs, linking inputs to scalars
-    /// Sorts the names so that it should be order independent
+    /// Sorts the names so that it should be order independent, as long as each branch name is unique
     pub fn from_branches_with_prefix<'a, B>(prefix: &str, branches: B) -> Result<Self, Error>
     where
         B: IntoIterator<Item = &'a Branch>,
@@ -195,6 +197,19 @@ impl<const N: usize> UidDigest<N> {
         let mut buf: Vec<u8> = Vec::new();
 
         let mut branch_vec: Vec<&Branch> = branches.into_iter().collect();
+
+        // add a check for branch name uniqueness, this is an edge case
+        let unique_count = branch_vec
+            .iter()
+            .map(|x| &x.variable_name)
+            .collect::<HashSet<_>>()
+            .len();
+
+        // error out if they are not the same, indicates they are not all unique
+        match unique_count == branch_vec.len() {
+            false => bail!("Multiple copies of variable names in input branches"),
+            _ => {}
+        }
 
         // sort the branches for repeatability
         branch_vec.sort_by_key(|k| &k.variable_name);
@@ -325,5 +340,140 @@ impl<const N: usize> std::str::FromStr for UidDigest<N> {
                 .map_err(|_| UidDigestParseError::InvalidHex)?;
         }
         Ok(UidDigest { id: bytes })
+    }
+}
+
+/// Tests for VarStepId, BrId, VId, UidDigest
+#[cfg(test)]
+mod test_uid_digest {
+
+    use std::str::FromStr;
+
+    use polars::prelude::{AnyValue, DataType};
+
+    use super::*;
+
+    // Normal usage
+    #[test]
+    fn test_direct_construct() {
+        let c_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 9];
+        let uid = UidDigest::<8> { id: c_id };
+        assert_eq!(uid.id, [1, 2, 3, 4, 5, 6, 7, 9]);
+    }
+
+    #[test]
+    fn test_str_value_construction() {
+        let str = "sleep_time".to_string();
+        let dtype = DataType::String;
+        let value = Scalar::new(dtype.clone(), AnyValue::String("1.2"));
+
+        // just make sure it doesn't error
+        let uid_res = UidDigest::<8>::from_str_value(&str, &value);
+        assert!(uid_res.is_ok());
+    }
+
+    #[test]
+    fn test_branch_construction_and_invariance() {
+        // define branches directly
+        let br1_id = BrId::from_str("Br8ab76063a44fe25f").unwrap(); // actually the BrId doesn't matter
+        let variable1_name = "sleep_time".to_string();
+        let dtype = DataType::String;
+        let variable1_value = Scalar::new(dtype.clone(), AnyValue::String("1.2"));
+        let branch1 = Branch {
+            uid: br1_id,
+            variable_name: variable1_name,
+            value: variable1_value,
+        };
+
+        let br2_id = BrId::from_str("Br03f41d5e9f2c560b").unwrap(); // actually the BrId doesn't matter
+        let variable2_name = "wait_time".to_string();
+        let variable2_value = Scalar::new(dtype.clone(), AnyValue::String("1.5"));
+        let branch2 = Branch {
+            uid: br2_id,
+            variable_name: variable2_name,
+            value: variable2_value,
+        };
+
+        let branches = vec![&branch1, &branch2];
+        let branches_inverted = vec![&branch2, &branch1];
+
+        // just check that it is invariant to order, but not invariant if the branch name is the same
+        let uid = UidDigest::<8>::from_branches_with_prefix("prefix", branches).unwrap();
+        let uid_inverted =
+            UidDigest::<8>::from_branches_with_prefix("prefix", branches_inverted).unwrap();
+
+        assert_eq!(uid, uid_inverted);
+    }
+
+    /// similar to test_branch_construction_and_invariance, except this is an edge case where branch names are the same
+    /// should through an error (otherwise it can be dependent on order, if values evaluate the same)
+    #[test]
+    fn test_nonunique_branch_vars() {
+        // define branches directly
+        let br1_id = BrId::from_str("Br8ab76063a44fe25f").unwrap(); // actually the BrId doesn't matter
+        let variable1_name = "sleep_time".to_string();
+        let dtype = DataType::String;
+        let variable1_value = Scalar::new(dtype.clone(), AnyValue::String("1.2"));
+        let branch1 = Branch {
+            uid: br1_id,
+            variable_name: variable1_name,
+            value: variable1_value,
+        };
+
+        let br2_id = BrId::from_str("Br03f41d5e9f2c560b").unwrap(); // actually the BrId doesn't matter
+        let variable2_name = "sleep_time".to_string();
+        let variable2_value = Scalar::new(dtype.clone(), AnyValue::String("1.5"));
+        let branch2 = Branch {
+            uid: br2_id,
+            variable_name: variable2_name,
+            value: variable2_value,
+        };
+
+        let branches = vec![&branch1, &branch2];
+
+        // just check that it is invariant to order, but not invariant if the branch name is the same
+        let uid = UidDigest::<8>::from_branches_with_prefix("prefix", branches);
+        assert!(uid.is_err())
+    }
+
+    #[test]
+    fn test_hexstr_representation() {
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        let hex_str = "ad2adb0860fe8343";
+        let uid = UidDigest::<8>::from_str(hex_str).unwrap();
+        assert_eq!(uid.id, u8_arr);
+    }
+
+    #[test]
+    fn test_to_hexstr_representation() {
+        let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
+        let uid = UidDigest::<8> { id: u8_arr };
+
+        let hex_string = format!("{uid}");
+
+        assert_eq!(hex_string, "ad2adb0860fe8343".to_string())
+    }
+
+    // Error cases
+
+    #[test]
+    fn test_too_long_hex() {
+        let hex_str = "ad2adb0860fe8343ad2adb0860fe8343".to_string();
+        let uid = UidDigest::<8>::from_str(&hex_str);
+        assert_eq!(
+            uid.unwrap_err(),
+            UidDigestParseError::InvalidLength {
+                expected: 16,
+                actual: 32
+            }
+        );
+    }
+
+    #[test]
+    fn test_non_hex_str() {
+        // throw some zz in there
+        let hex_str = "ad2adb0860fe83zz".to_string();
+        let uid = UidDigest::<8>::from_str(&hex_str);
+        assert_eq!(uid.unwrap_err(), UidDigestParseError::InvalidHex);
     }
 }

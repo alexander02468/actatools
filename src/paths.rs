@@ -62,7 +62,9 @@ impl Directory {
 
 /// Stores a filepath, explicitly differentiates between a relative path that is incomplete
 /// and a relative path that has a relative_base_path defined or is absolute (complete).
-#[derive(Debug, Clone)]
+/// Note that equality is defined as full equality, not resolved paths, so FilePath::Relative(Relative=bar, base_dir = foo)
+/// is NOT the same as FilePath::Absolute(/bar/foo)
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilePath {
     Absolute(PathBuf),
     Relative {
@@ -145,6 +147,7 @@ impl FilePath {
             Self::RelativeIncomplete(relative) => Self::Relative { base_dir, relative },
         }
     }
+
 }
 
 impl Serialize for FilePath {
@@ -170,5 +173,104 @@ impl<'de> Deserialize<'de> for FilePath {
         } else {
             Ok(FilePath::RelativeIncomplete(path))
         }
+    }
+}
+
+/// Tests for FilePath
+#[cfg(test)]
+mod test_file_path {
+
+    use crate::paths::{Directory, FilePath};
+    use core::matches;
+    use std::{path::{PathBuf}};
+
+    // construction tests
+
+    #[test]
+    fn test_construct_relative() {
+        let path = PathBuf::from("./foo.bar");
+        let test = FilePath::new(&path, None).unwrap();
+        assert!(matches!(test, FilePath::RelativeIncomplete(x) if x == path));
+    }
+
+    #[test]
+    fn test_construct_absolute() {
+        let path = PathBuf::from("/foo.bar");
+        let test = FilePath::new(&path, None).unwrap();
+        assert!(matches!(test, FilePath::Absolute(x) if x == path));
+    }
+
+    #[test]
+    fn test_construct_relative_with_base() {
+        let base = Directory(PathBuf::from("/foo/")); // override the directory check 
+        let relative = PathBuf::from("bar");
+        let test = FilePath::new(&relative, Some(base.clone())).unwrap();
+        assert!(
+            matches!(test, FilePath::Relative { base_dir, relative } if (base_dir == base) && (relative == relative) )
+        );
+    }
+
+    #[test]
+    fn test_construct_absolute_and_base() {
+        let base = Directory(PathBuf::from("/foo/")); // override the directory check 
+        let absolute = PathBuf::from("/bar/foo");
+        let test = FilePath::new(&absolute, Some(base.clone()));
+        assert!(test.is_err())
+    }
+
+    #[test]
+    fn test_get_base_dir_path() {
+        let base = Directory(PathBuf::from("/foo/")); // override the directory check 
+        let relative = PathBuf::from("bar");
+        let test = FilePath::new(&relative, Some(base.clone())).unwrap();
+        assert_eq!(test.get_base_dir_path().unwrap(), PathBuf::from("/foo/"));
+    }
+
+    #[test]
+    fn test_path() {
+        let base = Directory(PathBuf::from("/foo/")); // override the directory check 
+        let relative = PathBuf::from("bar");
+        let test = FilePath::new(&relative, Some(base.clone())).unwrap();
+        let path = PathBuf::from("/foo/bar");
+        assert_eq!(test.get_path().unwrap(), path);
+
+    }
+
+    #[test]
+    fn test_get_path_compact() {
+        let base = Directory(PathBuf::from("/foo/")); // override the directory check 
+        let relative = PathBuf::from("bar");
+        let test = FilePath::new(&relative, Some(base.clone())).unwrap();
+        let path = PathBuf::from("bar");
+        assert_eq!(test.get_path_compact().unwrap(), path);
+    }
+
+    // serialization/deserialization test
+    #[test]
+    fn uid_digest_round_trips_through_json() {
+        let base = Directory(PathBuf::from("/foo/")); // override the directory check 
+        let relative = PathBuf::from("bar");
+        let test = FilePath::new(&relative, Some(base.clone())).unwrap();
+        let json = serde_json::to_string(&test).unwrap();
+        assert_eq!(json, "\"bar\"");  // this is implicitly the compact path
+        let parsed_json : FilePath = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed_json, FilePath::RelativeIncomplete(PathBuf::from("bar")));
+    }
+
+    // Directory tests
+    #[test]
+    fn test_construct_directory() {
+
+        // just use here because it is a directory
+        let path = Directory::here().as_path().to_path_buf();
+        let base = Directory::new(path); // override the directory check 
+        assert!(base.is_ok());
+    }
+
+    #[test]
+    fn test_construct_invalid_directory() {
+        let base = Directory::new(PathBuf::from("/foo")); // override the directory check
+        assert!(base.is_err()) ;
     }
 }

@@ -387,9 +387,9 @@ mod test_unhashed_record_entry {
 // Test record
 #[cfg(test)]
 mod test_record {
-    use std::path::absolute;
+    use std::path::{PathBuf, absolute};
 
-    use crate::{paths::FilePath, records::RecordIncludes};
+    use crate::{paths::{Directory, FilePath}, records::RecordIncludes};
 
     #[test]
     fn construction() {
@@ -409,17 +409,17 @@ mod test_record {
     #[test]
     fn render_to() {
         let mut record_includes = RecordIncludes::new();
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/foo.bar");
-        let abs_path = absolute(path).unwrap();
-        let file = FilePath::new(&abs_path, None).unwrap();
+        let directory = Directory::new(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let file = FilePath::new(&PathBuf::from("tests/fixtures/foo.bar"), Some(directory)).unwrap();
         record_includes.add_include(file);
         let mut record_res = record_includes.into_record().unwrap();
         record_res.metadata = None; // so we don't deal with timestamp differences
 
-        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"/Users/alexanderbaker/Documents/Code_Repository/actatools/tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}\n".to_string();
         let mut buffer: Vec<u8> = Vec::new();
         record_res.render_to(&mut buffer).unwrap();
         let output = String::from_utf8(buffer).unwrap();
+
+        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}\n".to_string();
 
         assert_eq!(output, gold_string);
     }

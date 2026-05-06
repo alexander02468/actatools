@@ -14,6 +14,7 @@ pub enum PathError {
     InvalidParentOfRoot,
     FilePathNeedsBaseDir,
     NewFilePathInvalidArguments,
+    FileNameExtractionError,
     NotADirectory(PathBuf),
 }
 
@@ -29,6 +30,9 @@ impl std::fmt::Display for PathError {
             }
             PathError::NotADirectory(path) => {
                 write!(f, "FilePath {} is not a directory", path.to_string_lossy())
+            }
+            PathError::FileNameExtractionError => {
+                write!(f, "Filename could not be extracted from FilePath")
             }
         }
     }
@@ -77,6 +81,13 @@ impl FilePath {
     /// Creates a new FilePath
     /// Uses the base_dir to complete, if provided
     pub fn new(path: &Path, base_dir: Option<Directory>) -> Result<Self, PathError> {
+        // do not allow for empty paths without a base_dir
+        let _result = match (path.as_os_str().is_empty(), &base_dir) {
+            (true, None) => Err(PathError::NewFilePathInvalidArguments),
+
+            _ => Ok(()),
+        }?;
+
         match (path.is_absolute(), base_dir) {
             // absolute && base_directory provided --> for now return Error (trying to path parse would be brittle
             // and it's better to let the caller do the split explicitly)
@@ -94,6 +105,27 @@ impl FilePath {
                 relative: path.to_path_buf(),
             }),
         }
+    }
+
+    /// This is used to ease extraction of filenames, as even incomplete paths should have a filename (if we just
+    /// try and resolve, for incomplete ones, we will correctly receive an error)
+    pub fn get_filename(&self) -> Result<String, PathError> {
+        let path = match self {
+            FilePath::Absolute(path_buf) => path_buf,
+            FilePath::Relative {
+                base_dir: _,
+                relative,
+            } => relative,
+            FilePath::RelativeIncomplete(path_buf) => path_buf,
+        };
+
+        let filename = path
+            .file_name()
+            .ok_or_else(|| PathError::FileNameExtractionError)?
+            .to_string_lossy()
+            .to_string();
+
+        Ok(filename)
     }
 
     /// Gets the likely relative path, either it forwards the relative path or uses the parent as the base
@@ -147,7 +179,6 @@ impl FilePath {
             Self::RelativeIncomplete(relative) => Self::Relative { base_dir, relative },
         }
     }
-
 }
 
 impl Serialize for FilePath {
@@ -182,7 +213,7 @@ mod test_file_path {
 
     use crate::paths::{Directory, FilePath};
     use core::matches;
-    use std::{path::{PathBuf}};
+    use std::path::PathBuf;
 
     // construction tests
 
@@ -233,7 +264,6 @@ mod test_file_path {
         let test = FilePath::new(&relative, Some(base.clone())).unwrap();
         let path = PathBuf::from("/foo/bar");
         assert_eq!(test.get_path().unwrap(), path);
-
     }
 
     #[test]
@@ -245,6 +275,13 @@ mod test_file_path {
         assert_eq!(test.get_path_compact().unwrap(), path);
     }
 
+    #[test]
+    fn test_empty_relative_only_path() {
+        let relative = PathBuf::from("");
+        let test = FilePath::new(&relative, None);
+        assert!(test.is_err())
+    }
+
     // serialization/deserialization test
     #[test]
     fn uid_digest_round_trips_through_json() {
@@ -252,16 +289,18 @@ mod test_file_path {
         let relative = PathBuf::from("bar");
         let test = FilePath::new(&relative, Some(base.clone())).unwrap();
         let json = serde_json::to_string(&test).unwrap();
-        assert_eq!(json, "\"bar\"");  // this is implicitly the compact path
-        let parsed_json : FilePath = serde_json::from_str(&json).unwrap();
+        assert_eq!(json, "\"bar\""); // this is implicitly the compact path
+        let parsed_json: FilePath = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(parsed_json, FilePath::RelativeIncomplete(PathBuf::from("bar")));
+        assert_eq!(
+            parsed_json,
+            FilePath::RelativeIncomplete(PathBuf::from("bar"))
+        );
     }
 
     // Directory tests
     #[test]
     fn test_construct_directory() {
-
         // just use here because it is a directory
         let path = Directory::here().as_path().to_path_buf();
         let base = Directory::new(path); // override the directory check 
@@ -271,6 +310,6 @@ mod test_file_path {
     #[test]
     fn test_construct_invalid_directory() {
         let base = Directory::new(PathBuf::from("/foo")); // override the directory check
-        assert!(base.is_err()) ;
+        assert!(base.is_err());
     }
 }

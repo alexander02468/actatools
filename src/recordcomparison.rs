@@ -4,28 +4,43 @@
 // This file contains code related to Comparing Records which is for evidence packaging
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
 use std::io::Write;
 
 use anyhow::Error;
 
-use crate::records::{HashedRecordEntry, Record};
-
+use crate::records::HashedRecordEntry;
+#[derive(Debug)]
 pub struct MatchEngine {
-    pub extractor: Box<dyn KeyExtractStrategy>,
+    pub extractors: Vec<Box<dyn KeyExtractStrategy>>,
 }
 impl MatchEngine {
+    /// empty MatchEngine
+    pub fn new() -> Self {
+        let extractors: Vec<Box<dyn KeyExtractStrategy>> = Vec::new();
+        MatchEngine { extractors }
+    }
+
+    /// adds a filename extractor
+    pub fn with_filename_extractor(self) -> Self {
+        let mut extractors = self.extractors;
+        extractors.push(Box::new(KeyExtractFilename));
+
+        Self { extractors }
+    }
+
+    /// Matches records according to the extractor method
     pub fn match_record_entries<'a>(
         &self,
-        record_before: &'a Record,
-        record_after: &'a Record,
+        record_entries_before: &'a Vec<&'a HashedRecordEntry>,
+        record_entries_after: &'a Vec<&'a HashedRecordEntry>,
     ) -> Vec<MatchResult<'a>> {
-        let record_entries_before: Vec<&HashedRecordEntry> =
-            record_before.record_entries.iter().collect();
-        let record_entries_after: Vec<&HashedRecordEntry> =
-            record_after.record_entries.iter().collect();
+        // create an owned copy of the vector,
+        let record_entries_before: Vec<&HashedRecordEntry> = record_entries_before.to_vec();
+        let record_entries_after: Vec<&HashedRecordEntry> = record_entries_after.to_vec();
 
-        let grouped_keys_before = group_by_key(record_entries_before, self.extractor.as_ref());
-        let grouped_keys_after = group_by_key(record_entries_after, self.extractor.as_ref());
+        let grouped_keys_before = group_by_key(record_entries_before, self.extractors[0].as_ref());
+        let grouped_keys_after = group_by_key(record_entries_after, self.extractors[0].as_ref());
 
         let all_keys: BTreeSet<ExtractedKey> = grouped_keys_before
             .groups
@@ -94,7 +109,7 @@ impl MatchEngine {
     }
 }
 
-pub trait KeyExtractStrategy {
+pub trait KeyExtractStrategy: Debug {
     fn extract_key<'r>(&self, record_entry: &'r HashedRecordEntry) -> Option<ExtractedKey>;
 }
 
@@ -117,12 +132,7 @@ impl std::fmt::Display for ExtractedKey {
 pub struct KeyExtractFilename;
 impl KeyExtractStrategy for KeyExtractFilename {
     fn extract_key<'r>(&self, record_entry: &'r HashedRecordEntry) -> Option<ExtractedKey> {
-        let k = record_entry
-            .file
-            .get_path()
-            .ok()?
-            .file_name()
-            .map(|x| x.to_string_lossy().to_string());
+        let k = record_entry.file.get_filename().ok();
         k.map(|x| ExtractedKey::Filename(x))
     }
 }
@@ -133,6 +143,8 @@ pub struct GroupedHashedRecordEntries<'a> {
     ungrouped: Vec<&'a HashedRecordEntry>,
 }
 
+/// This function uses a group of entries and groups them by a key as dictated by the input
+/// KeyExtractStrategy
 fn group_by_key<'a>(
     items: Vec<&'a HashedRecordEntry>,
     extractor: &dyn KeyExtractStrategy,
@@ -178,6 +190,26 @@ pub enum MatchResult<'a> {
     },
 }
 
+impl<'a> MatchResult<'a> {
+    /// simple function that returns whether or not the Match is a good match
+    pub fn is_matched(&self) -> bool {
+        match self {
+            MatchResult::Matched {
+                before: _,
+                after: _,
+                key: _,
+            } => true,
+            MatchResult::Added { after: _, key: _ } => false,
+            MatchResult::Removed { before: _, key: _ } => false,
+            MatchResult::Ambiguous {
+                before_candidates: _,
+                after_candidates: _,
+                key: _,
+            } => false,
+        }
+    }
+}
+
 pub struct DiffEngine;
 
 impl DiffEngine {
@@ -187,7 +219,7 @@ impl DiffEngine {
         after: &'a HashedRecordEntry,
         key: ExtractedKey,
     ) -> RecordDiff<'a> {
-        if before.digest == after.digest {
+        if before.data_digest == after.data_digest {
             RecordDiff::NoChange { before, after, key }
         } else {
             RecordDiff::HashChange { before, after, key }
@@ -441,7 +473,7 @@ impl Render {
             "  input2:     {}",
             after.file.get_path_compact()?.display()
         )?;
-        writeln!(out, "  digest:     {}", before.digest)?;
+        writeln!(out, "  digest:     {}", before.data_digest)?;
         Ok(())
     }
 
@@ -464,7 +496,11 @@ impl Render {
             "  input2:     {}",
             after.file.get_path_compact()?.display()
         )?;
-        writeln!(out, "  digest:     {} -> {}", before.digest, after.digest)?;
+        writeln!(
+            out,
+            "  digest:     {} -> {}",
+            before.data_digest, after.data_digest
+        )?;
         Ok(())
     }
 
@@ -481,8 +517,7 @@ impl Render {
             "  input2:     {}",
             after.file.get_path_compact()?.display()
         )?;
-        writeln!(out, "  digest:     {}", after.digest)?;
-
+        writeln!(out, "  digest:     {}", after.data_digest)?;
         Ok(())
     }
 
@@ -499,7 +534,7 @@ impl Render {
             "  input1:     {}",
             before.file.get_path_compact()?.display()
         )?;
-        writeln!(out, "  digest:     {}", before.digest)?;
+        writeln!(out, "  digest:     {}", before.data_digest)?;
         Ok(())
     }
 
@@ -516,26 +551,369 @@ impl Render {
             out,
             "  reason:     multiple input1 and input2 records share this key"
         )?;
-
         writeln!(out, "  input1 candidates:")?;
         for candidate in before {
             writeln!(
                 out,
                 "    - {}    digest: {}",
                 candidate.file.get_path()?.display(),
-                candidate.digest
+                candidate.data_digest
             )?;
         }
-
         writeln!(out, "  input2 candidates:")?;
         for candidate in after {
             writeln!(
                 out,
                 "    - {}    digest: {}",
                 candidate.file.get_path()?.display(),
-                candidate.digest
+                candidate.data_digest
             )?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test_match_engine {
+
+    use std::path::PathBuf;
+
+    use crate::{
+        paths::{Directory, FilePath},
+        uid::UidDigest,
+    };
+
+    use super::*;
+
+    /// convenience function that makes a Hashed record using a filename and a string that represents the data
+    /// If the string_data is the same, then it will produce the same data_digest
+    /// If the filename is the same, then it will have the same file path
+    /// If both are the same, then the hashed record will be exactly the same
+    pub fn make_fake_hashed_record(filename: &str, string_data: &str) -> HashedRecordEntry {
+        let file = FilePath::new(
+            &PathBuf::from(filename),
+            Some(Directory::new("./").unwrap()),
+        )
+        .unwrap();
+        let data_digest = UidDigest::<32>::from_str_slice(string_data).unwrap();
+        HashedRecordEntry { file, data_digest }
+    }
+
+    #[test]
+    fn make_match_engine_with_filename() {
+        let match_engine = MatchEngine::new().with_filename_extractor();
+
+        assert_eq!(match_engine.extractors.len(), 1);
+    }
+
+    /// Tests when multiple filenames are grouped separately
+    #[test]
+    fn test_group_by_filename() {
+        // different filenames
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("bar", "foobar");
+        let items = vec![&record1, &record2];
+
+        let grouped_hash_records = group_by_key(items, &KeyExtractFilename);
+
+        let expected_key_record1 = ExtractedKey::Filename("foo".to_string());
+        let expected_key_record2 = ExtractedKey::Filename("bar".to_string());
+        assert_eq!(grouped_hash_records.groups.len(), 2);
+        assert_eq!(grouped_hash_records.groups[&expected_key_record1].len(), 1);
+        assert_eq!(grouped_hash_records.groups[&expected_key_record2].len(), 1);
+        assert_eq!(grouped_hash_records.ungrouped.len(), 0);
+    }
+
+    /// Tests when multiple filenames are grouped together
+    #[test]
+    fn test_group_by_filename_multi() {
+        // same filenames
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("foo", "foobar");
+        let items = vec![&record1, &record2];
+
+        let grouped_hash_records = group_by_key(items, &KeyExtractFilename);
+
+        let expected_key = ExtractedKey::Filename("foo".to_string());
+        assert_eq!(grouped_hash_records.groups.len(), 1);
+        assert_eq!(grouped_hash_records.groups[&expected_key].len(), 2);
+        assert_eq!(grouped_hash_records.ungrouped.len(), 0);
+    }
+
+    #[test]
+    fn test_match_filename() {
+        // different data but same filename
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("foo", "foobar");
+
+        let record1_vec = vec![&record1];
+        let record2_vec = vec![&record2];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+
+        let matches = match_engine.match_record_entries(&record1_vec, &record2_vec);
+        assert_eq!(matches.len(), 1); // should only be 1 match
+        assert!(matches[0].is_matched()); // should be a match
+    }
+    #[test]
+    fn test_nonmatch_filename() {
+        // same data but different filename
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("bar", "bar");
+        let record1_vec = vec![&record1];
+        let record2_vec = vec![&record2];
+        let match_engine = MatchEngine::new().with_filename_extractor();
+
+        let matches = match_engine.match_record_entries(&record1_vec, &record2_vec);
+
+        assert_eq!(matches.len(), 2); // should be matches (unmatched)
+        assert!(!matches[0].is_matched()); // should be a match
+    }
+}
+
+#[cfg(test)]
+mod test_diff_engine {
+    use crate::recordcomparison::test_match_engine::make_fake_hashed_record;
+    use crate::recordcomparison::{DiffEngine, DifferenceSummary, MatchEngine};
+
+    #[test]
+    fn test_diff_result_same() {
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("foo", "bar");
+
+        let record1_vec = vec![&record1];
+        let record2_vec = vec![&record2];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+        let matches = match_engine.match_record_entries(&record1_vec, &record2_vec);
+
+        let diff_records = DiffEngine::diff_matches(matches);
+
+        assert_eq!(diff_records.len(), 1);
+
+        let diff_record_same = match diff_records[0] {
+            crate::recordcomparison::RecordDiff::NoChange {
+                before: _,
+                after: _,
+                key: _,
+            } => true,
+            _ => false,
+        };
+
+        assert!(diff_record_same);
+    }
+
+    #[test]
+    fn test_diff_result_changed() {
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("foo", "foobar");
+
+        let record1_vec = vec![&record1];
+        let record2_vec = vec![&record2];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+        let matches = match_engine.match_record_entries(&record1_vec, &record2_vec);
+
+        let diff_records = DiffEngine::diff_matches(matches);
+
+        assert_eq!(diff_records.len(), 1);
+
+        let diff_record_same = match diff_records[0] {
+            crate::recordcomparison::RecordDiff::HashChange {
+                before: _,
+                after: _,
+                key: _,
+            } => true,
+            _ => false,
+        };
+
+        assert!(diff_record_same);
+    }
+
+    #[test]
+    fn test_diff_result_added() {
+        let record1 = make_fake_hashed_record("foo", "bar");
+        let record2 = make_fake_hashed_record("bar", "newbar");
+
+        let record1_vec = vec![&record1];
+        let record2_vec = vec![&record2];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+        let matches = match_engine.match_record_entries(&record1_vec, &record2_vec);
+
+        let diff_records = DiffEngine::diff_matches(matches);
+
+        assert_eq!(diff_records.len(), 2);
+
+        let diff_record_same = match diff_records[0] {
+            crate::recordcomparison::RecordDiff::Added { after: _, key: _ } => true,
+            _ => false,
+        };
+
+        assert!(diff_record_same);
+    }
+
+    #[test]
+    fn test_diff_result_removed() {
+        let record1 = make_fake_hashed_record("foo", "bar");
+
+        let record1_vec = vec![&record1];
+        let record2_vec: Vec<&crate::records::HashedRecordEntry> = Vec::new();
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+        let matches = match_engine.match_record_entries(&record1_vec, &record2_vec);
+
+        let diff_records = DiffEngine::diff_matches(matches);
+
+        assert_eq!(diff_records.len(), 1);
+
+        let diff_record_same = match diff_records[0] {
+            crate::recordcomparison::RecordDiff::Removed { before: _, key: _ } => true,
+            _ => false,
+        };
+
+        assert!(diff_record_same);
+    }
+
+    #[test]
+    fn test_diff_summary() {
+        // record set 1
+        let record1_1 = make_fake_hashed_record("foo", "bar"); //same
+        let record1_2 = make_fake_hashed_record("bar", "bar"); //change
+        let record1_3 = make_fake_hashed_record("foobar", "foobar"); //remove
+
+        // record set 2
+        let record2_1 = make_fake_hashed_record("foo", "bar"); //same
+        let record2_2 = make_fake_hashed_record("bar", "foobar"); //changed
+        let record2_3 = make_fake_hashed_record("barfoo", "barfoo"); //added
+
+        let records1 = vec![&record1_1, &record1_2, &record1_3];
+        let records2 = vec![&record2_1, &record2_2, &record2_3];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+
+        let matches = match_engine.match_record_entries(&records1, &records2);
+
+        // 1 same, 1 change, 1 added, 1 remove = 4
+        let diff_records = DiffEngine::diff_matches(matches);
+        assert_eq!(diff_records.len(), 4);
+
+        let diff_summary = DifferenceSummary::from_record_diffs(&diff_records);
+
+        assert_eq!(diff_summary.num_same, 1);
+        assert_eq!(diff_summary.num_changed, 1);
+        assert_eq!(diff_summary.num_added, 1);
+        assert_eq!(diff_summary.num_removed, 1);
+    }
+}
+
+#[cfg(test)]
+mod test_rendering {
+    use super::*;
+    use crate::recordcomparison::{
+        DifferenceSummary, Render, test_match_engine::make_fake_hashed_record,
+    };
+
+    fn get_fake_diff_summary() -> DifferenceSummary {
+        // record set 1
+        let record1_1 = make_fake_hashed_record("foo", "bar"); //same
+        let record1_2 = make_fake_hashed_record("bar", "bar"); //change
+        let record1_3 = make_fake_hashed_record("foobar", "foobar"); //remove
+
+        // record set 2
+        let record2_1 = make_fake_hashed_record("foo", "bar"); //same
+        let record2_2 = make_fake_hashed_record("bar", "foobar"); //changed
+        let record2_3 = make_fake_hashed_record("barfoo", "barfoo"); //added
+
+        let records1 = vec![&record1_1, &record1_2, &record1_3];
+        let records2 = vec![&record2_1, &record2_2, &record2_3];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+
+        let matches = match_engine.match_record_entries(&records1, &records2);
+
+        // 1 same, 1 change, 1 added, 1 remove = 4
+        let diff_records = DiffEngine::diff_matches(matches);
+
+        let diff_summary = DifferenceSummary::from_record_diffs(&diff_records);
+
+        diff_summary
+    }
+
+    #[test]
+    fn test_render_summary() {
+        let diff_summary = get_fake_diff_summary();
+        let renderer = Render {
+            input1_label: "record1".to_owned(),
+            input2_label: "record2".to_owned(),
+        };
+        let mut buffer = Vec::new();
+        renderer.render_summary(&mut buffer, &diff_summary).unwrap();
+        let actual = String::from_utf8(buffer).unwrap();
+
+        let expected = "Summary\n-------\n\n  =  Same               1\n  ~  Changed            1\n  +  Added              1\n  -  Removed            1\n  !  Undetermined       0\n  !  Undetermined       0\n  -----------------------\n     Total              4\n\n".to_owned();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_render_all() {
+        // record set 1
+        let record1_1 = make_fake_hashed_record("foo", "bar"); //same
+        let record1_2 = make_fake_hashed_record("bar", "bar"); //change
+        let record1_3 = make_fake_hashed_record("foobar", "foobar"); //remove
+
+        // record set 2
+        let record2_1 = make_fake_hashed_record("foo", "bar"); //same
+        let record2_2 = make_fake_hashed_record("bar", "foobar"); //changed
+        let record2_3 = make_fake_hashed_record("barfoo", "barfoo"); //added
+
+        let records1 = vec![&record1_1, &record1_2, &record1_3];
+        let records2 = vec![&record2_1, &record2_2, &record2_3];
+
+        let match_engine = MatchEngine::new().with_filename_extractor();
+
+        let matches = match_engine.match_record_entries(&records1, &records2);
+
+        // 1 same, 1 change, 1 added, 1 remove = 4
+        let diff_records = DiffEngine::diff_matches(matches);
+
+        let renderer = Render {
+            input1_label: "record1".to_owned(),
+            input2_label: "record2".to_owned(),
+        };
+        let mut buffer = Vec::new();
+        renderer
+            .render_to_screen(&diff_records, &mut buffer)
+            .unwrap();
+        let actual = String::from_utf8(buffer).unwrap();
+
+        let expected = "Record comparison\n=================\n\nInputs\n------\n\ninput1: record1\ninput2: record2\n\nSummary\n-------\n\n  =  Same               1\n  ~  Changed            1\n  +  Added              1\n  -  Removed            1\n  !  Undetermined       0\n  !  Undetermined       0\n  -----------------------\n     Total              4\n\nLegend\n------\n\n  =  Same           record matched and digest is unchanged\n  ~  Changed        record matched but digest changed\n  +  Added          record exists only in input2\n  -  Removed        record exists only in input1\n  !  Undetermined   matcher could not safely pair records\n\nResults\n-------\n\n[0001] ~ CHANGED\n  key:        filename = bar\n  input1:     bar\n  input2:     bar\n  digest:     f2e897eed7d206cd855d441598fa521abc75aa96953e97c030c9612c30c1293d -> aa51dcd43d5c6c5203ee16906fd6b35db298b9b2e1de3fce81811d4806b76b7d\n\n[0002] + ADDED\n  key:        filename = barfoo\n  input2:     barfoo\n  digest:     d51127a308538a4f33d1c8d5b691d887740a5eceec2345d657981d30c7883e3a\n\n[0003] = SAME\n  key:        filename = foo\n  input1:     foo\n  input2:     foo\n  digest:     f2e897eed7d206cd855d441598fa521abc75aa96953e97c030c9612c30c1293d\n\n[0004] - REMOVED\n  key:        filename = foobar\n  input1:     foobar\n  digest:     aa51dcd43d5c6c5203ee16906fd6b35db298b9b2e1de3fce81811d4806b76b7d\n\n".to_string();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn render_legend_matches_expected_output() {
+        let renderer = Render {
+            input1_label: "".to_string(),
+            input2_label: "".to_string(),
+        };
+        let mut buffer = Vec::new();
+        renderer.render_legend(&mut buffer).unwrap();
+        let actual = String::from_utf8(buffer).unwrap();
+        let expected = "\
+Legend
+------
+
+  =  Same           record matched and digest is unchanged
+  ~  Changed        record matched but digest changed
+  +  Added          record exists only in input2
+  -  Removed        record exists only in input1
+  !  Undetermined   matcher could not safely pair records
+
+";
+
+        assert_eq!(actual, expected);
     }
 }

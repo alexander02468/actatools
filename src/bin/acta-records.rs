@@ -76,7 +76,7 @@ fn main() -> Result<(), Error> {
             let mut record_includes = RecordIncludes::new();
             for file in record_files {
                 let filepath = FilePath::new(&file, Some(Directory::here()))?;
-                record_includes.add_include(filepath)?;
+                record_includes.add_include(filepath);
             }
 
             let record = record_includes.into_record()?;
@@ -126,10 +126,15 @@ fn main() -> Result<(), Error> {
             let new_record = record.recalculate_record(record_base_path)?;
 
             // now just use the same compare code
-            let matcher = MatchEngine {
-                extractor: Box::new(KeyExtractFilename),
-            };
-            let matches = matcher.match_record_entries(&record, &new_record);
+            let matcher = MatchEngine::new().with_filename_extractor();
+
+            // extract the records out of each
+            let record_orig_entries: Vec<&records::HashedRecordEntry> =
+                record.record_entries.iter().collect();
+            let record_new_entries: Vec<&records::HashedRecordEntry> =
+                new_record.record_entries.iter().collect();
+
+            let matches = matcher.match_record_entries(&record_orig_entries, &record_new_entries);
 
             let record_diffs = recordcomparison::DiffEngine::diff_matches(matches);
 
@@ -151,10 +156,14 @@ fn main() -> Result<(), Error> {
             let record2 = Record::load_json(&record_file_2)
                 .expect(&format!("Unable to create Record from record file 2"));
 
-            let matcher = MatchEngine {
-                extractor: Box::new(KeyExtractFilename),
-            };
-            let matches = matcher.match_record_entries(&record1, &record2);
+            // extract the records out of each
+            let record1_entries: Vec<&records::HashedRecordEntry> =
+                record1.record_entries.iter().collect();
+            let record2_entries: Vec<&records::HashedRecordEntry> =
+                record2.record_entries.iter().collect();
+
+            let matcher = MatchEngine::new().with_filename_extractor();
+            let matches = matcher.match_record_entries(&record1_entries, &record2_entries);
 
             let record_diffs = recordcomparison::DiffEngine::diff_matches(matches);
 

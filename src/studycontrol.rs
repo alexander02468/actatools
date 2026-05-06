@@ -11,6 +11,7 @@ use polars::{
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
 };
 

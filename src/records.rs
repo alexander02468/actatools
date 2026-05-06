@@ -21,22 +21,6 @@ const RECORD_ENTRY_LEN: usize = 32;
 
 const JSON_RECORD_FORMAT_VERSION: usize = 1;
 
-/// Error relating to records: RecordIncludes and Record
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecordError {
-    AddIncludePathError(String),
-}
-
-impl std::fmt::Display for RecordError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RecordError::AddIncludePathError(s) => write!(f, "Unable to add path {}", s),
-        }
-    }
-}
-
-impl std::error::Error for RecordError {}
-
 /// Holds the parsed data in the record.includes file. Can be thought of a constructor template for a Record
 /// (which has the files hashed as well)
 #[derive(Debug, Clone)]
@@ -52,10 +36,9 @@ impl RecordIncludes {
 
     /// Adds an include by filepath to the exsting RecordIncludes.
     /// An optional relative base path allows for filepaths relative to different folders
-    pub fn add_include(&mut self, file: FilePath) -> Result<(), RecordError> {
+    pub fn add_include(&mut self, file: FilePath) -> () {
         let new_record_entry = UnhashedRecordEntry { file };
         self.record_entries.push(new_record_entry);
-        Ok(())
     }
 
     /// Extends the current includes with the files in an entire IncludesFile
@@ -106,7 +89,7 @@ impl RecordIncludes {
 
         for record_entry in self.record_entries.into_iter() {
             let hashed_record = record_entry.into_hashed_record()?;
-            let digest = hashed_record.digest;
+            let digest = hashed_record.data_digest;
             record_hasher.update(&digest.id);
             hashed_record_entries.push(hashed_record);
         }
@@ -116,7 +99,7 @@ impl RecordIncludes {
             digest.as_bytes()[..RECORD_ENTRY_LEN].try_into().unwrap();
 
         Ok(Record {
-            metadata: Some(RecordMetadata::current()),
+            metadata: Some(RecordMetadata::current()?),
             record_entries: hashed_record_entries,
             digest: UidDigest { id: digest },
         })
@@ -153,7 +136,7 @@ impl UnhashedRecordEntry {
         let digest = self.hash()?;
         Ok(HashedRecordEntry {
             file: self.file,
-            digest,
+            data_digest: digest,
         })
     }
 }
@@ -161,7 +144,7 @@ impl UnhashedRecordEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashedRecordEntry {
     pub file: FilePath,
-    pub digest: UidDigest<RECORD_ENTRY_LEN>,
+    pub data_digest: UidDigest<RECORD_ENTRY_LEN>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,17 +219,37 @@ pub struct RecordMetadata {
     pub library_version: String,
     pub digest_algorithm: String,
     pub generated_at_utc: String,
+    pub meta_digest: UidDigest<32>,
 }
 
 impl RecordMetadata {
-    pub fn current() -> Self {
-        Self {
-            record_format: JSON_RECORD_FORMAT_VERSION,
-            generated_by: env!("CARGO_PKG_NAME").to_string(),
-            library_version: env!("CARGO_PKG_VERSION").to_string(),
-            digest_algorithm: "BLAKE3".to_string(), // Hardcoded, but will change to dynamic if SHA-256 is added
-            generated_at_utc: OffsetDateTime::now_utc().to_string(),
-        }
+    pub fn current() -> Result<Self, Error> {
+        let record_format = JSON_RECORD_FORMAT_VERSION;
+        let generated_by = env!("CARGO_PKG_NAME").to_string();
+        let library_version = env!("CARGO_PKG_VERSION").to_string();
+        let digest_algorithm = "BLAKE3".to_string(); // Hardcoded, but will change to dynamic if SHA-256 is added
+        let generated_at_utc = OffsetDateTime::now_utc().to_string();
+
+        let mut meta_string: String = String::new();
+        meta_string.push_str(&JSON_RECORD_FORMAT_VERSION.to_string());
+        meta_string.push_str(" ");
+        meta_string.push_str(&generated_by);
+        meta_string.push_str(" ");
+        meta_string.push_str(&library_version);
+        meta_string.push_str(" ");
+        meta_string.push_str(&digest_algorithm);
+        meta_string.push_str(" ");
+        meta_string.push_str(&generated_at_utc);
+        let meta_digest = UidDigest::<32>::from_str_slice(&meta_string)?;
+
+        Ok(Self {
+            record_format,
+            generated_by,
+            library_version,
+            digest_algorithm, // Hardcoded, but will change to dynamic if SHA-256 is added
+            generated_at_utc,
+            meta_digest,
+        })
     }
 }
 
@@ -300,4 +303,145 @@ pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Resul
     record.write_json(&output_dir.join("manifest.json"))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test_record_includes {
+
+    use super::*;
+
+    #[test]
+    fn initialize() {
+        let record = RecordIncludes::new();
+        assert!(record.record_entries.is_empty()); // just make sure it's initalized and emtpy
+    }
+
+    #[test]
+    fn add_include() {
+        let mut record = RecordIncludes::new();
+        let file = FilePath::RelativeIncomplete(PathBuf::from("foobar"));
+
+        let _result = record.add_include(file);
+
+        assert_eq!(
+            record.record_entries[0].file,
+            FilePath::RelativeIncomplete(PathBuf::from("foobar"))
+        );
+    }
+
+    #[test]
+    fn parse_line_normal() {
+        let filepath = "foobar";
+        let result = RecordIncludes::parse_line(filepath).unwrap().unwrap();
+
+        assert_eq!(
+            result,
+            FilePath::RelativeIncomplete(PathBuf::from(filepath))
+        );
+    }
+
+    #[test]
+    fn parse_line_empty() {
+        let filepath = "";
+        let result = RecordIncludes::parse_line(filepath).unwrap();
+        assert!(result.is_none())
+    }
+
+    #[test]
+    fn parse_line_only_comment() {
+        let filepath = "# foobar comment";
+        let result = RecordIncludes::parse_line(filepath).unwrap();
+        assert!(result.is_none())
+    }
+
+    #[test]
+    fn parse_line_with_comment() {
+        let filepath = "foobar # commented later";
+        let result = RecordIncludes::parse_line(filepath).unwrap().unwrap();
+
+        assert_eq!(
+            result,
+            FilePath::RelativeIncomplete(PathBuf::from("foobar"))
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_unhashed_record_entry {
+    use std::path::absolute;
+
+    use crate::{paths::FilePath, records::UnhashedRecordEntry};
+
+    #[test]
+    fn test_into_hash_record() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/foo.bar");
+        let abs_path = absolute(path).unwrap();
+        let file = FilePath::new(&abs_path, None).unwrap();
+        let record_entry = UnhashedRecordEntry { file };
+        let record_res = record_entry.into_hashed_record();
+
+        assert!(record_res.is_ok());
+    }
+}
+
+// Test record
+#[cfg(test)]
+mod test_record {
+    use std::path::absolute;
+
+    use crate::{paths::FilePath, records::RecordIncludes};
+
+    #[test]
+    fn construction() {
+        let mut record_includes = RecordIncludes::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/foo.bar");
+        let abs_path = absolute(path).unwrap();
+        let file = FilePath::new(&abs_path, None).unwrap();
+        record_includes.add_include(file);
+        let record_res = record_includes.into_record();
+        let digest = record_res.unwrap().digest;
+        let gold_digest_hex =
+            "2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0".to_string();
+        let digest_str = digest.to_string();
+        assert_eq!(gold_digest_hex, digest_str);
+    }
+
+    #[test]
+    fn render_to() {
+        let mut record_includes = RecordIncludes::new();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/foo.bar");
+        let abs_path = absolute(path).unwrap();
+        let file = FilePath::new(&abs_path, None).unwrap();
+        record_includes.add_include(file);
+        let mut record_res = record_includes.into_record().unwrap();
+        record_res.metadata = None; // so we don't deal with timestamp differences
+
+        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"/Users/alexanderbaker/Documents/Code_Repository/actatools/tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}\n".to_string();
+        let mut buffer: Vec<u8> = Vec::new();
+        record_res.render_to(&mut buffer).unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+
+        assert_eq!(output, gold_string);
+    }
+}
+
+#[cfg(test)]
+mod test_record_metadata {
+
+    use crate::records::{JSON_RECORD_FORMAT_VERSION, RecordMetadata};
+
+    /// Does not currently test the time creation
+    #[test]
+    fn current() {
+        let generated_by = env!("CARGO_PKG_NAME").to_string();
+        let library_version = env!("CARGO_PKG_VERSION").to_string();
+        let digest_algorithm = "BLAKE3".to_string(); // Hardcoded, but will change to dynamic if SHA-256 is added
+
+        let current = RecordMetadata::current().unwrap();
+        assert_eq!(current.record_format, JSON_RECORD_FORMAT_VERSION);
+        assert_eq!(current.generated_by, generated_by);
+        assert_eq!(current.library_version, library_version);
+        // let now = OffsetDateTime::now_utc();
+        assert_eq!(current.digest_algorithm, digest_algorithm)
+    }
 }

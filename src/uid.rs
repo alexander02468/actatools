@@ -175,13 +175,19 @@ pub struct UidDigest<const N: usize> {
     pub id: [u8; N],
 }
 impl<const N: usize> UidDigest<N> {
+    /// creates a UidDigest from a string slice, hashing the string bytes
+    pub fn from_str_slice(string: &str) -> Result<Self, Error> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf.extend_from_slice(string.as_bytes());
+        let digest = blake3::hash(&buf); // 32 bytes
+        let out: [u8; N] = digest.as_bytes()[..N].try_into()?;
+        Ok(Self { id: out })
+    }
+
     pub fn from_str_value(string: &str, val: &Scalar) -> Result<Self, Error> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(string.as_bytes());
-        buf.extend(
-            crate::conversion::convert_scalar_to_bytes_array(val)
-                .expect("Unable to convert to bytes array"),
-        );
+        buf.extend(val.as_any_value().to_string().as_bytes());
         let digest = blake3::hash(&buf); // 32 bytes
         let out: [u8; N] = digest.as_bytes()[..N].try_into()?;
 
@@ -218,10 +224,7 @@ impl<const N: usize> UidDigest<N> {
 
         for b in branch_vec {
             buf.extend_from_slice(b.variable_name.as_bytes());
-            buf.extend(
-                crate::conversion::convert_scalar_to_bytes_array(&b.value)
-                    .expect("Unable to convert to bytes array"),
-            );
+            buf.extend(b.value.as_any_value().to_string().as_bytes());
         }
 
         let digest = blake3::hash(&buf); // 32 bytes

@@ -1,7 +1,6 @@
 # ActaTools
 
-ActaTools is a set of lightweight command-line tools for managing reproducible, and traceable computational studies by scaffolding 
-workflows with config-based setup, orchestration, study design, and BLAKE3 evidence bundling.
+ActaTools is a set of lightweight command-line tools for managing computational studies with config-based setup, orchestration, and BLAKE3 evidence bundling inside existing workflows.
 
 ## Features
 
@@ -9,6 +8,46 @@ workflows with config-based setup, orchestration, study design, and BLAKE3 evide
 - File-based run and dependency tracking
 - Provenance control through BLAKE3 backed evidence package bundling
 - Repeatability by systematically defined Study Configurations
+
+## Why Actatools?
+
+Data provenance and workflow orchestration is crowded with many other existing tools. Where does ActaTools fit in?
+
+### It is light
+
+The Rust compiled binaries are small, and there are no dependencies. It is compiled which leads to relatively fast performance. Furthermore, it uses BLAKE3 hashing which is substantially faster than SHA-256.
+
+### It is portable
+
+The binaries are statically compiled with dependencies only on the CPU architecture and OS. This means that you can just
+copy and paste it almost on any computer and it will likely work. There are no dependencies -- no Python needed, no git
+calls underneath, and no docker.
+
+Study configuration is a TOML file that can be placed at the top of any study. Run statuses are local file-based,
+no general database needs to be installed.
+
+It's not that batteries are included so much as batteries aren't needed.
+
+### It is flexible
+
+Being lightweight and command-line means it can be wrapped through whatever scripts or tools you usually for your projects. Want to include a manifest of your Python scripts? Just add a `subprocess.run()` call where you want. Using Bash scripts on your HPC? Drop the file onto your home directory and add `~/actarecords record my_file > record.json` at the end. Or if
+you just want to generate a manifest of all your files at the end, just list and pipe into ActaTools,
+`ls study/* | actarecords record > study_manifest.json`
+
+You can use it for regulation compliance, script version tracking, or regression testing.
+
+### What about other tools?
+
+ActaTools, by design, sits in a comfortable niche that no other tools currently occupy. Most other tools are larger
+and more cumbersome -- difficult to integrate into entrenched workflows or they make you buy into their workflow.
+
+That's not to say they're bad, it's just not what ActaTools is trying to be.
+
+ActaTools is for the small research group that works mainly locally, and needs to have data and script provenance, or
+a small tool to organize their studies. It is not replacing big orchestration tools like Snakeflow or distributed
+database management like Datalad.
+
+It is designed to be the step before reaching for those larger solutions.
 
 ## Binaries
 
@@ -19,13 +58,39 @@ ActaTools consists of two separate binaries that can be used independently of ea
 | ActaRecords      | `acta-records` | Evidence generation and tracking                                      |
 | ActaStudy        | `acta-study`   | Study configuration, Step creation/dependency, and Study execution    |
 
+## Status
+
+ActaTools is an *early-stage project*. As such, there will be features that have not been thoroughly implemented or
+tested.
+
+### ActaRecords
+
+Primary effort is going towards ActaRecords, as that is tightly scoped and has immediate benefit to teams that need
+to add a provenance layer. The command-line interface allows evidence bundling ad-hoc with user scripts and can
+be directly integrated into existing workflows, or batched at the end.
+
+Status: Core features are implemented. Robustness and hardening is ongoing, and minor optional features are being added.
+
+### ActaStudy
+
+Secondary effort is going towards ActaStudy, as that is more ambitious use-case, but with possibly lower broad-appeal as it does require changes to workflows. Therefore, it cannot be easily inserted after a workflow has already been setup.
+
+Status: Core architecture and limited features are added. Robustness testing is lacking.
+
 ## Installation
 
-Prebuilt binaries are published as assets on the GitHub Releases page.
+Prebuilt binaries are published as assets under the GitHub Releases. The basic installation process is download
+the binaries locally, then put them along your command line path, or call them directly. These binaries are
+self-contained and portable.
+
+Build are provided for Linux, MacOS, and Windows. However, only Linux and MacOS are actively tested while Windows builds
+are done through the Github CI and are provided "as-is".
 
 ### On Linux
 
-On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`. For ActaRecords:
+On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`. 
+
+For ActaRecords:
 
 ``` bash
 cp acta-records ~/bin
@@ -34,14 +99,8 @@ cp acta-records ~/bin
 You can check that ActaRecords is on your path by trying to see its version
 
 ``` bash
-acta-study --version
+acta-records --version
 ```
-
-### On Windows
-
-Windows binaries are provided on a best-effort basis. They are built by CI and basic tests are run, but most development and support effort is focused on Linux.
-
-[Not yet implemented]
 
 ## Examples
 
@@ -225,7 +284,6 @@ redirected to a file.
 - As relative paths have not been robustly tested, it is recommended to run studies from the Study root, which is defined
 by the `config.toml`.
 - Configurable status logging is not supported.
-- Depends on Pola.rs, which is overkill and inflates the binary size.
 
 ## Issues
 

@@ -2,7 +2,6 @@
 
 use assert_cmd::{
     Command,
-    output::{self, OutputOkExt},
 };
 use std::path::Path;
 

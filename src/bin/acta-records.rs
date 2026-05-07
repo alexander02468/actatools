@@ -3,7 +3,7 @@ use std::io;
 use std::path::PathBuf;
 
 use actatools::paths::{Directory, FilePath};
-use actatools::recordcomparison::{self, KeyExtractFilename, MatchEngine, Render};
+use actatools::recordcomparison::{self, MatchEngine, Render};
 use actatools::records::{self, Record, RecordIncludes};
 use anyhow::{Error, anyhow};
 use clap::{Args, Parser, Subcommand};

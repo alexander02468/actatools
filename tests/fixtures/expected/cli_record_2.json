@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "record_format": 1,
+    "generated_by": "actatools",
+    "library_version": "0.2.2",
+    "digest_algorithm": "BLAKE3",
+    "generated_at_utc": "2026-05-06 23:23:52.729279 +00:00:00",
+    "meta_digest": "68f0135c7add128db35d0f5186d1d2bb09e77f81cef300ea68474ddb09314125"
+  },
+  "record_entries": [
+    {
+      "file": "../foo.bar",
+      "data_digest": "9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c"
+    }
+  ],
+  "digest": "2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0"
+}

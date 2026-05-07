@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 ascii-dag = "0.8.3"
+assert_cmd = "2.2.1"
 base64 = "0.22.1"
 blake3 = "1.8.5"
 clap = { version = "4.5.56", features = ["cargo", "derive"] }

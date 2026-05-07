@@ -108,8 +108,7 @@ fn main() -> Result<(), Error> {
         }
         Commands::Verify(verify_args) => {
             // let record_path_str = verify_args.record;
-            let record = Record::load_json(&verify_args.record)
-                .expect(&format!("There was a problem loading Record"));
+            let record = Record::load_json(&verify_args.record)?;
 
             let record_path = match verify_args.record.is_absolute() {
                 false => PathBuf::from("./").join(verify_args.record),

@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "record_format": 1,
+    "generated_by": "actatools",
+    "library_version": "0.2.2",
+    "digest_algorithm": "BLAKE3",
+    "generated_at_utc": "2026-05-06 23:11:32.951158 +00:00:00",
+    "meta_digest": "db3a8872cc3ff228d770c397e6bd17f60d3bd2a3644e4c8fe1546c3e59526e33"
+  },
+  "record_entries": [
+    {
+      "file": "tests/fixtures/foo.bar",
+      "data_digest": "9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c"
+    },
+    {
+      "file": "tests/fixtures/foo2.bar",
+      "data_digest": "99ff9c6740efe27e636aa330624a28f19ee96f5f844d1eee0192590d07e6c245"
+    }
+  ],
+  "digest": "c4f70b77e72ef1d87998a172b426336c82f5a9b80cc4869b19e29dae6647c737"
+}

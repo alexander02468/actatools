@@ -14,7 +14,7 @@ use anyhow::{Error, anyhow};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::paths::{Directory, FilePath};
+use crate::paths::{Directory, FilePath, PathError};
 use crate::uid::UidDigest;
 
 const RECORD_ENTRY_LEN: usize = 32;
@@ -181,7 +181,21 @@ impl Record {
     pub fn load_json(path: &Path) -> Result<Self, Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let record_file = serde_json::from_reader(reader)?;
+        let mut record_file: Record = serde_json::from_reader(reader)?;
+
+        // now fix the Filepaths if needed, to use the base directory of the file
+        let base_dir = Directory::new(path.parent().ok_or(PathError::InvalidParentOfRoot)?)?;
+
+        let fixed_record_entries: Vec<HashedRecordEntry> = record_file
+            .record_entries
+            .into_iter()
+            .map(|x| HashedRecordEntry {
+                file: x.file.into_complete(base_dir.clone()),
+                data_digest: x.data_digest,
+            })
+            .collect();
+
+        record_file.record_entries = fixed_record_entries;
 
         Ok(record_file)
     }
@@ -389,7 +403,10 @@ mod test_unhashed_record_entry {
 mod test_record {
     use std::path::{PathBuf, absolute};
 
-    use crate::{paths::{Directory, FilePath}, records::RecordIncludes};
+    use crate::{
+        paths::{Directory, FilePath},
+        records::RecordIncludes,
+    };
 
     #[test]
     fn construction() {
@@ -410,7 +427,8 @@ mod test_record {
     fn render_to() {
         let mut record_includes = RecordIncludes::new();
         let directory = Directory::new(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
-        let file = FilePath::new(&PathBuf::from("tests/fixtures/foo.bar"), Some(directory)).unwrap();
+        let file =
+            FilePath::new(&PathBuf::from("tests/fixtures/foo.bar"), Some(directory)).unwrap();
         record_includes.add_include(file);
         let mut record_res = record_includes.into_record().unwrap();
         record_res.metadata = None; // so we don't deal with timestamp differences

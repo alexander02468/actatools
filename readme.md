@@ -32,20 +32,18 @@ It's not that batteries are included so much as batteries aren't needed.
 
 Being lightweight and command-line means it can be wrapped through whatever scripts or tools you usually for your projects. Want to include a manifest of your Python scripts? Just add a `subprocess.run()` call where you want. Using Bash scripts on your HPC? Drop the file onto your home directory and add `~/actarecords record my_file > record.json` at the end. Or if
 you just want to generate a manifest of all your files at the end, just list and pipe into ActaTools,
-`ls study/* | actarecords record > study_manifest.json`
+`ls study/* | actarecords record - > study_manifest.json`
 
 You can use it for regulation compliance, script version tracking, or regression testing.
 
 ### What about other tools?
 
-ActaTools, by design, sits in a comfortable niche that no other tools currently occupy. Most other tools are larger
-and more cumbersome -- difficult to integrate into entrenched workflows or they make you buy into their workflow.
-
-That's not to say they're bad, it's just not what ActaTools is trying to be.
+By design, ActaTools sits in a comfortable niche that no other tools currently occupy. Most other tools are larger
+and more cumbersome -- difficult to integrate into entrenched workflows or they make you buy into their workflow. Or the other end is a bunch of small tools that you would need to script around.
 
 ActaTools is for the small research group that works mainly locally, and needs to have data and script provenance, or
 a small tool to organize their studies. It is not replacing big orchestration tools like Snakeflow or distributed
-database management like Datalad.
+database management like DataLad.
 
 It is designed to be the step before reaching for those larger solutions.
 
@@ -73,108 +71,63 @@ Status: Core features are implemented. Robustness and hardening is ongoing, and 
 
 ### ActaStudy
 
-Secondary effort is going towards ActaStudy, as that is more ambitious use-case, but with possibly lower broad-appeal as it does require changes to workflows. Therefore, it cannot be easily inserted after a workflow has already been setup.
+Minimal effort is currently going towards ActaStudy, as that is more ambitious use-case, but with possibly lower broad-appeal as it does require changes to workflows. As such, it cannot be easily inserted after a workflow has already been setup.
 
 Status: Core architecture and limited features are added. Robustness testing is lacking.
 
 ## Installation
 
-Prebuilt binaries are published as assets under the GitHub Releases. The basic installation process is download
+Prebuilt binaries are published as assets under the GitHub Releases. The installation process is download
 the binaries locally, then put them along your command line path, or call them directly. These binaries are
 self-contained and portable.
 
-Build are provided for Linux, MacOS, and Windows. However, only Linux and MacOS are actively tested while Windows builds
+Release Builds are provided for Linux, MacOS, and Windows. However, only Linux and MacOS are actively tested while Windows builds
 are done through the Github CI and are provided "as-is".
-
-### On Linux
-
-On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`. 
-
-For ActaRecords:
-
-``` bash
-cp acta-records ~/bin
-```
-
-You can check that ActaRecords is on your path by trying to see its version
-
-``` bash
-acta-records --version
-```
 
 ## Examples
 
-This section is designed as a Quick-Start guide. Please see the associated Acta-Records or Acta-Study User Guide for more detailed documentation.
+This section is a Quick-Start guide. Please see the associated [Acta-Records user guide](/docs/acta-records%20user%20manual.md) or Acta-Study User Guide for more detailed documentation.
 
-### ActaRecords - Evidence bundling, verification, and comparison
+### Record evidence and verify
 
-ActaRecords is the tool designed for lightweight evidence generation and tracking. It uses a minimal Includes File to create
-a record of the files that should be hashed and recorded.
+Files can be hashed and recorded into a Record, which is a JSON file that stores the hashes associated with each file.
 
-Because ActaRecords is lightweight, it is straightforward to integrate into existing workflows. A minimal includes
-file and a command-line call can bundle the artifacts from existing workflows.
+From the `/examples/acta-records` directory: 
 
-An example can be found in `examples/acta-records/`.
+``` bash
+acta-records record example_file_1.txt example_file_2.txt --output record_1.json
+```
 
-Here you should find the following:
+or more succinctly with using `stdin`
+
+``` bash
+ls *.txt | acta-records record --output record_2.json
+```
+> Note this is a different Record than the last command because there are more files in this one.
+
+This can be verified using the `verify` command:
 
 ```bash
-example_file_1.txt
-example_file_1_copy.txt
-example_file_2.txt
-record.includes
+acta-records verify record_1.json record_2.json
 ```
 
-The example [Includes File](/examples/acta-records/record.includes) includes all the example files in the folder. 
-To create a manifest, use the `record` command.
+which will print a verification summary for each input Record.
+
+### Compare two Records for differences
+
+You can compare two Records in detail using the `compare` command. Note that only two Records can be compared at once.
+
+If you've ran the `record` commands above, you can compare the two Records.
 
 ``` bash
-acta-records record record.includes record.json
+acta-records compare record_1.json record_2.json
 ```
 
-This creates a Record, `record.json`. This file stores the hash for each of the example files -- it
-is generated on the file contents themselves, not metadata. For example, the hash values for `example_file_1.txt` and
-`example_file_1_copy.txt` `record.json` are the same, even though the filenames, and thus metadata, is different. These
-hash values are portable across filesystems and CPU architectures.
-
-``` bash
-  "record_entries": [
-    {
-      "file": "./example_file_1.txt",
-      "digest": "756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a"
-    },
-    {
-      "file": "./example_file_1_copy.txt",
-      "digest": "756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a"
-    },
-  ]
-```
-
-The command `bundle` bundles the files referenced in the Includes File to a folder. It also creates a Record in that folder
-named `manifest.json`.
-
-``` bash
-acta-study bundle record.includes foo/
-```
-
-The folder `foo/` will have all the files from `record.includes` along with the Record `manifest.json`.
-
-The command `compare` compares two Records, aligning files and checking their hash values against one another.
-
-``` bash
-acta-study compare record.json test/manifest.json
-```
-
-This prints a summary of the comparison -- there should be no differences since recorded identical data.
-
-The command `verify` verifies an existing Record by re-hashing all the files and creating a comparison report against the
-new Record. This will expose file changes since the Record was originally recorded.
-
-``` bash
-acta-study verify record.json
-```
+This attempts to match the files across the Records and then compares the hash values.
 
 ### ActaStudy - Study configuration and orchestration
+
+> ActaStudy is less mature and should be considered experimental.
 
 ActaStudy is the tool designed to manage orchestration of studies through a TOML-based Configuration File. An example
 study can be found in `/examples/acta-study/`.
@@ -219,7 +172,7 @@ Directed Acyclic Graph
 The command `status` displays information regarding either the Study `status study`, a Variation `status Variation <Variation Id>`
 or a Step `status Step <Step Id>`.
 
-The subcommand `status study` is useful to see an overview of Variations and Steps along with their Ids and run status.
+The sub-command `status study` is useful to see an overview of Variations and Steps along with their Ids and run status.
 
 ``` bash
 Variations
@@ -259,31 +212,6 @@ Steps can be run continuously according to a Variation or the entire Study
 acta-study run variation <Variation_Id>
 acta-study run study
 ```
-
-## Limitations
-
-ActaTools is in active development and new features are being implemented. Additionally, robustness, documentation, and 
-test coverage is currently weak, so please be aware that certain functionalities may be brittle. Linux workflows
-are being prioritized so Windows based edge-cases (for example, path handling) are not well supported.
-
-Known limitations include:
-
-### ActaRecords
-
-- Older SHA-256 hashing is not implemented.
-- File-matching for Record comparison is done by filename only. More sophisticated matching such as using the
-  extended path is not implemented.
-- Report (for example, from `compare` or `verify`) output to files is not yet implemented. As a workaround, the stdout can be 
-redirected to a file.
-
-### ActaStudy
-
-- Detached running of Steps is not implemented.
-- Parsing of template strings is not robust against ill-formed Strings in Step definitions.
-- Only TOML and CSV files are currently supported.
-- As relative paths have not been robustly tested, it is recommended to run studies from the Study root, which is defined
-by the `config.toml`.
-- Configurable status logging is not supported.
 
 ## Issues
 

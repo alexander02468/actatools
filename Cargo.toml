@@ -12,6 +12,7 @@ ascii-dag = "0.8.3"
 base64 = "0.22.1"
 blake3 = "1.8.5"
 clap = { version = "4.5.56", features = ["cargo", "derive"] }
+pathdiff = "0.2.3"
 polars = { version = "0.53.0", features = ["diagonal_concat"]}
 serde = "1.0.228"
 serde_json = "1.0.149"

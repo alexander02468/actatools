@@ -86,7 +86,7 @@ are done through the Github CI and are provided "as-is".
 
 ## Examples
 
-This section is a Quick-Start guide. Please see the associated [Acta-Records user guide](/docs/acta-records%20user%20manual.md) or Acta-Study User Guide for more detailed documentation.
+This section is a Quick-Start guide. Please see the associated [Acta-Records user guide](/docs/acta-records%20user%20guide.md) or Acta-Study User Guide for more detailed documentation.
 
 ### Record evidence and verify
 

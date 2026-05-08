@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use actatools::paths::{Directory, FilePath};
 use actatools::recordcomparison::{self, MatchEngine, Render};
-use actatools::records::{self, Record, RecordIncludes};
+use actatools::records::{self, Record, RecordIncludes, render_record};
 use anyhow::{Error, anyhow};
 use clap::{Args, Parser, Subcommand};
 
@@ -72,7 +72,9 @@ fn main() -> Result<(), Error> {
         Commands::Record(record_args) => {
             // convert record Paths into filename
             let record_files = record_args.files;
+            let output = record_args.output_file;
 
+            // fix the includes?
             let mut record_includes = RecordIncludes::new();
             for file in record_files {
                 let filepath = FilePath::new(&file, Some(Directory::here()))?;
@@ -81,12 +83,20 @@ fn main() -> Result<(), Error> {
 
             let record = record_includes.into_record()?;
 
-            let mut out: Box<dyn std::io::Write> = match record_args.output_file {
+            let mut out: Box<dyn std::io::Write> = match output.clone() {
                 Some(file) => Box::new(File::create(file)?),
                 None => Box::new(io::stdout()),
             };
 
-            record.render_to(&mut out)?;
+            let parent_dir = match output {
+                Some(d) => match d.clone().parent() {
+                    Some(d) => Some(Directory::new(d)?),
+                    None => Some(Directory::here()),
+                },
+                None => None,
+            };
+
+            render_record(&record, &mut out, parent_dir)?;
 
             Ok(())
         }

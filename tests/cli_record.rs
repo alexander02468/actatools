@@ -1,8 +1,6 @@
 // tests/cli_manifest.rs
 
-use assert_cmd::{
-    Command,
-};
+use assert_cmd::Command;
 use std::path::Path;
 
 use serde_json::Value;
@@ -14,6 +12,7 @@ fn normalize_record_json_for_test(mut value: Value) -> Value {
     {
         metadata.remove("generated_at_utc");
         metadata.remove("meta_digest");
+        metadata.remove("library_version");
     }
     value
 }

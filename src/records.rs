@@ -11,6 +11,7 @@ use std::{
 };
 
 use anyhow::{Error, anyhow};
+use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -155,27 +156,27 @@ pub struct Record {
 }
 
 impl Record {
-    pub fn render_to<W: Write>(&self, out: &mut W) -> Result<(), Error> {
-        let json_self_string = self.as_json_string()?;
-        write!(out, "{json_self_string}")?;
-        writeln!(out, "")?;
-        out.flush()?;
+    // pub fn render_to<W: Write>(&self, out: &mut W) -> Result<(), Error> {
+    //     let json_self_string = self.as_json_string()?;
+    //     write!(out, "{json_self_string}")?;
+    //     writeln!(out, "")?;
+    //     out.flush()?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    /// Writes a JSON by converting to String then writing out
-    pub fn write_json(&self, f_path: &Path) -> Result<(), Error> {
-        let mut f = File::create(f_path)?;
+    // /// Writes a JSON by converting to String then writing out
+    // pub fn write_json(&self, f_path: &Path) -> Result<(), Error> {
+    //     let mut f = File::create(f_path)?;
 
-        self.render_to(&mut f)?;
-        Ok(())
-    }
+    //     self.render_to(&mut f)?;
+    //     Ok(())
+    // }
 
-    /// Converts to JSON using Serialize
-    pub fn as_json_string(&self) -> Result<String, Error> {
-        Ok(serde_json::to_string_pretty(self)?)
-    }
+    // /// Converts to JSON using Serialize
+    // pub fn as_json_string(&self) -> Result<String, Error> {
+    //     Ok(serde_json::to_string_pretty(self)?)
+    // }
 
     /// Loads a JSON using Deserialize
     pub fn load_json(path: &Path) -> Result<Self, Error> {
@@ -267,6 +268,82 @@ impl RecordMetadata {
     }
 }
 
+#[derive(Debug, Clone)]
+enum RecordError {
+    RelativePathCreationError,
+}
+impl std::fmt::Display for RecordError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Relative fiile path unable to be created")
+    }
+}
+impl std::error::Error for RecordError {}
+
+/// Views that allow for custom output views --usually for shaping the filepaths at write time
+#[derive(Debug, serde::Serialize)]
+struct RecordOutputView<'a> {
+    metadata: &'a Option<RecordMetadata>,
+    record_entries: Vec<HashedRecordEntryOutputView<'a>>,
+    digest: &'a UidDigest<RECORD_ENTRY_LEN>,
+}
+
+impl<'a> RecordOutputView<'a> {
+    fn from_record_relative_path(
+        record: &'a Record,
+        relative_base_directory: Option<Directory>,
+    ) -> Result<Self, Error> {
+        let relative_directory = match relative_base_directory {
+            Some(d) => d,
+            None => Directory::here(),
+        };
+
+        // build the record entries with the adjusted directory paths
+        let mut record_entries: Vec<HashedRecordEntryOutputView<'a>> =
+            Vec::with_capacity(record.record_entries.len());
+
+        for record in &record.record_entries {
+            // fix the filepath
+            let orig_path = record.file.get_path_compact()?;
+
+            let relative_path = diff_paths(orig_path, relative_directory.as_path() )
+                .ok_or_else(|| RecordError::RelativePathCreationError)?;
+
+            let new_path = FilePath::new(&relative_path, Some(relative_directory.clone()))?;
+
+            let new_record_entry = HashedRecordEntryOutputView {
+                file: new_path.clone(),
+                data_digest: &record.data_digest,
+            };
+
+            record_entries.push(new_record_entry);
+        }
+
+        Ok(RecordOutputView {
+            metadata: &record.metadata,
+            record_entries,
+            digest: &record.digest,
+        })
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+struct HashedRecordEntryOutputView<'a> {
+    file: FilePath,
+    data_digest: &'a UidDigest<RECORD_ENTRY_LEN>,
+}
+
+/// Write a Record to the writeable object, where the reference directory can be set
+pub fn render_record<W: Write>(
+    record: &Record,
+    writer: &mut W,
+    relative_base_directory: Option<Directory>,
+) -> Result<(), Error> {
+    let view = RecordOutputView::from_record_relative_path(record, relative_base_directory)?;
+    serde_json::to_writer_pretty(writer, &view)?;
+
+    Ok(())
+}
+
 /// Copies all the files in the RecordIncludes to output_directory, writing a new record_includes + manifest.json
 pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Result<(), Error> {
     // create the directory if it does not exist, do not allow for super nested directories to be autocreated
@@ -314,7 +391,10 @@ pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Resul
     record_includes.extend_includes_file(&includes_path)?;
     let record = record_includes.into_record()?;
 
-    record.write_json(&output_dir.join("manifest.json"))?;
+    let mut f = File::create(&output_dir.join("record.json"))?;
+    let output_directory = Directory::new(output_dir)?;
+
+    render_record(&record, &mut f, Some(output_directory))?;
 
     Ok(())
 }
@@ -403,6 +483,8 @@ mod test_unhashed_record_entry {
 mod test_record {
     use std::path::{PathBuf, absolute};
 
+    use super::*;
+
     use crate::{
         paths::{Directory, FilePath},
         records::RecordIncludes,
@@ -434,10 +516,12 @@ mod test_record {
         record_res.metadata = None; // so we don't deal with timestamp differences
 
         let mut buffer: Vec<u8> = Vec::new();
-        record_res.render_to(&mut buffer).unwrap();
+
+        // create a render view
+        render_record(&record_res, &mut buffer, None).unwrap();
         let output = String::from_utf8(buffer).unwrap();
 
-        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}\n".to_string();
+        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}".to_string();
 
         assert_eq!(output, gold_string);
     }

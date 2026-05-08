@@ -1,4 +1,6 @@
-# ActaRecords user manual
+# ActaRecords user guide
+
+Version 0.3.0
 
 ## Introduction
 

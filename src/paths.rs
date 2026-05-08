@@ -47,6 +47,9 @@ impl Directory {
     pub fn new(path: impl Into<PathBuf>) -> Result<Self, PathError> {
         let path = path.into();
 
+        // if the path is empty, assume it is real
+        if path.as_os_str().is_empty() {return Ok(Directory::here())}
+
         if !path.is_dir() {
             return Err(PathError::NotADirectory(path));
         }

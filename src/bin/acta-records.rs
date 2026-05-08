@@ -1,11 +1,11 @@
 use std::fs::File;
-use std::io;
-use std::path::PathBuf;
+use std::io::{self, IsTerminal, Read};
+use std::path::{Path, PathBuf};
 
 use actatools::paths::{Directory, FilePath};
 use actatools::recordcomparison::{self, MatchEngine, Render};
 use actatools::records::{self, Record, RecordIncludes, render_record};
-use anyhow::{Error, anyhow};
+use anyhow::{Error, anyhow, bail};
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
@@ -35,11 +35,17 @@ enum Commands {
 #[derive(Debug, Args)]
 struct RecordArgs {
     /// Files to include in the Record
-    files: Vec<PathBuf>,
+    files: Option<Vec<PathBuf>>,
 
     /// Output to <FILE> instead of stdout
     #[arg(short, long, value_name = "FILE")]
-    output_file: Option<PathBuf>,
+    output: Option<PathBuf>,
+
+    /// Read NUL-separated paths from stdin.
+    ///
+    /// Intended for: find . -type f -print0 | acta-records record --stdin0
+    #[arg(long)]
+    stdin0: bool,
 }
 
 #[derive(Debug, Args)]
@@ -66,19 +72,108 @@ struct CompareArgs {
     record2: PathBuf,
 }
 
+fn read_paths_from_stdin_lines() -> Result<Vec<PathBuf>, Error> {
+    let mut input = Vec::new();
+    if io::stdin().is_terminal() {
+        bail!("Values needed in stdin")
+    }
+    io::stdin().read_to_end(&mut input)?;
+
+    if input.contains(&0) {
+        bail!("stdin contains NUL bytes; use --stdin0 for NUL-separated path input");
+    }
+
+    let input = String::from_utf8(input)?;
+
+    Ok(input
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect())
+}
+
+fn read_paths_from_stdin_nul() -> Result<Vec<PathBuf>, Error> {
+    let mut input = Vec::new();
+    if io::stdin().is_terminal() {
+        bail!("Values needed in stdin")
+    }
+    io::stdin().read_to_end(&mut input)?;
+
+    // dbg!(&input);
+
+    let paths = input
+        .split(|byte| *byte == 0)
+        .filter(|chunk| !chunk.is_empty())
+        .map(|chunk| PathBuf::from(String::from_utf8_lossy(chunk).to_string()))
+        .collect();
+
+    Ok(paths)
+}
+
+enum PathInputMode {
+    ExplicitPaths,
+    StdinNewlines,
+    StdinNul,
+}
+
+fn determine_path_input_mode(paths: &Vec<PathBuf>, stdin0: bool) -> anyhow::Result<PathInputMode> {
+    let has_dash = paths.iter().any(|path| path == Path::new("-"));
+
+    if stdin0 {
+        if !paths.is_empty() && !has_dash {
+            anyhow::bail!("--stdin0 cannot be combined with explicit path arguments");
+        }
+        return Ok(PathInputMode::StdinNul);
+    }
+
+    if has_dash {
+        if paths.len() > 1 {
+            anyhow::bail!("`-` cannot be combined with explicit path arguments");
+        }
+        return Ok(PathInputMode::StdinNewlines);
+    }
+
+    if paths.is_empty() {
+        return Ok(PathInputMode::StdinNewlines);
+    }
+
+    Ok(PathInputMode::ExplicitPaths)
+}
+
 fn main() -> Result<(), Error> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Record(record_args) => {
-            // convert record Paths into filename
-            let record_files = record_args.files;
-            let output = record_args.output_file;
+            // error out if there are no args + no stdin
+            let record_files = record_args.files.unwrap_or_default();
+            if record_files.is_empty() && !record_args.stdin0 && io::stdin().is_terminal() {
+                let mut cmd = RecordArgs::augment_args(clap::Command::new("record"));
+                cmd.error(
+                    clap::error::ErrorKind::MissingRequiredArgument,
+                    "no input paths provided; pass paths, use `-` for stdin, or use `--stdin0`",
+                )
+                .exit();
+            }
 
-            // fix the includes?
+            // convert record Paths into filename
+            let output = record_args.output;
             let mut record_includes = RecordIncludes::new();
-            for file in record_files {
+
+            // we have 3 scenarios here,
+            let file_paths = match determine_path_input_mode(&record_files, record_args.stdin0)? {
+                PathInputMode::ExplicitPaths => record_files,
+                PathInputMode::StdinNewlines => read_paths_from_stdin_lines()?,
+                PathInputMode::StdinNul => read_paths_from_stdin_nul()?,
+            };
+
+            // add the files in the arguments
+            for file in file_paths {
                 let filepath = FilePath::new(&file, Some(Directory::here()))?;
                 record_includes.add_include(filepath);
+            }
+
+            if record_includes.record_entries.is_empty() {
+                bail!("No files provided")
             }
 
             let record = record_includes.into_record()?;

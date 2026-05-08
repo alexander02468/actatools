@@ -34,7 +34,7 @@ Being lightweight and command-line means it can be wrapped through whatever scri
 you just want to generate a manifest of all your files at the end, just list and pipe into ActaTools,
 `ls study/* | actarecords record - > study_manifest.json`
 
-You can use it for regulation compliance, script version tracking, or regression testing.
+You can use it as part of a larger regulation compliance scheme, script version tracking, or regression testing.
 
 ### What about other tools?
 

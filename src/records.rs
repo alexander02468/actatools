@@ -26,7 +26,7 @@ const JSON_RECORD_FORMAT_VERSION: usize = 1;
 /// (which has the files hashed as well)
 #[derive(Debug, Clone)]
 pub struct RecordIncludes {
-    record_entries: Vec<UnhashedRecordEntry>,
+    pub record_entries: Vec<UnhashedRecordEntry>,
 }
 
 impl RecordIncludes {
@@ -305,7 +305,7 @@ impl<'a> RecordOutputView<'a> {
             // fix the filepath
             let orig_path = record.file.get_path_compact()?;
 
-            let relative_path = diff_paths(orig_path, relative_directory.as_path() )
+            let relative_path = diff_paths(orig_path, relative_directory.as_path())
                 .ok_or_else(|| RecordError::RelativePathCreationError)?;
 
             let new_path = FilePath::new(&relative_path, Some(relative_directory.clone()))?;

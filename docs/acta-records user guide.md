@@ -22,8 +22,6 @@ Specific use cases do *not* include:
 In short, ActaRecords is for: 
  > Small research teams that have established workflows, and need to start tracking script/data integrity, bundle evidence, or implement workflow regression testing with minimal effort.
 
-
-
 ## Installation
 
 Prebuilt binaries are published as assets under the GitHub Releases. The installation process is download

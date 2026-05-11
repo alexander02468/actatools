@@ -37,29 +37,5 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package Linux
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p dist
-          VERSION="${GITHUB_REF_NAME}"
-
-          cp "target/${{ matrix.target }}/release/acta-records" \
-             "dist/acta-records-${VERSION}-${{ matrix.target }}"
-
-          cp "target/${{ matrix.target }}/release/acta-study" \
-             "dist/acta-study-${VERSION}-${{ matrix.target }}"
-
-      - name: Package Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist
-          $version = "${env:GITHUB_REF_NAME}"
-
-          Copy-Item `
-            "target/${{ matrix.target }}/release/acta-records.exe" `
-            "dist/acta-records-$version-${{ matrix.target }}.exe"
-
-          Copy-Item `
-            "target/${{ matrix.target }}/release/acta-study.exe" `
-            "dist/acta-study-$version-${{ matrix.target }}.exe"
+      - name: Test
+        run: cargo test

@@ -63,8 +63,3 @@ jobs:
           Copy-Item `
             "target/${{ matrix.target }}/release/acta-study.exe" `
             "dist/acta-study-$version-${{ matrix.target }}.exe"
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*

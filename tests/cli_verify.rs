@@ -7,10 +7,9 @@ fn test_verify_long() {
 
     let mut cmd = Command::cargo_bin("acta-records").unwrap();
 
-    let expected_output = std::fs::read_to_string(
-        cargo_dir.join("tests/fixtures/expected/cli_verify_long.txt"),
-    )
-    .unwrap();
+    let expected_output =
+        std::fs::read_to_string(cargo_dir.join("tests/fixtures/expected/cli_verify_long.txt"))
+            .unwrap();
 
     let output = String::from_utf8(
         cmd.arg("verify")
@@ -33,10 +32,9 @@ fn test_verify_compact() {
 
     let mut cmd = Command::cargo_bin("acta-records").unwrap();
 
-    let expected_output = std::fs::read_to_string(
-        cargo_dir.join("tests/fixtures/expected/cli_verify_multi.txt"),
-    )
-    .unwrap();
+    let expected_output =
+        std::fs::read_to_string(cargo_dir.join("tests/fixtures/expected/cli_verify_multi.txt"))
+            .unwrap();
 
     let output = String::from_utf8(
         cmd.arg("verify")
@@ -59,10 +57,9 @@ fn test_verify_compact_stdin0() {
 
     let mut cmd = Command::cargo_bin("acta-records").unwrap();
 
-    let expected_output = std::fs::read_to_string(
-        cargo_dir.join("tests/fixtures/expected/cli_verify_multi.txt"),
-    )
-    .unwrap();
+    let expected_output =
+        std::fs::read_to_string(cargo_dir.join("tests/fixtures/expected/cli_verify_multi.txt"))
+            .unwrap();
 
     let output = String::from_utf8(
         cmd.arg("verify")
@@ -79,18 +76,15 @@ fn test_verify_compact_stdin0() {
     assert_eq!(expected_output, output);
 }
 
-
-
 #[test]
 fn test_verify_compact_stdin_newline() {
     let cargo_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
     let mut cmd = Command::cargo_bin("acta-records").unwrap();
 
-    let expected_output = std::fs::read_to_string(
-        cargo_dir.join("tests/fixtures/expected/cli_verify_multi.txt"),
-    )
-    .unwrap();
+    let expected_output =
+        std::fs::read_to_string(cargo_dir.join("tests/fixtures/expected/cli_verify_multi.txt"))
+            .unwrap();
 
     let output = String::from_utf8(
         cmd.arg("verify")

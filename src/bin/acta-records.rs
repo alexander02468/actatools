@@ -277,7 +277,7 @@ fn main() -> Result<(), Error> {
 
                 match verify_args.fprint0 {
                     true => write!(out, "\0")?,
-                    false => {},
+                    false => {}
                 };
             }
             Ok(())

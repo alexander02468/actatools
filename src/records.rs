@@ -16,7 +16,7 @@ use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::{uid::{UidDigest, hash_digests_stable}};
+use crate::uid::{UidDigest, hash_digests_stable};
 use crate::{
     paths::{Directory, FilePath, PathError},
     uid::hash_file,

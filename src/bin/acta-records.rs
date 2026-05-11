@@ -88,10 +88,10 @@ struct VerifyArgs {
 
 #[derive(Debug, Args)]
 struct CompareArgs {
-    /// Specificiation File
+    /// Referenc record
     record1: PathBuf,
 
-    ///
+    /// Record to compare to
     record2: PathBuf,
 }
 
@@ -139,7 +139,7 @@ enum PathInputMode {
     StdinNul,
 }
 
-fn determine_path_input_mode(paths: &Vec<PathBuf>, stdin0: bool) -> anyhow::Result<PathInputMode> {
+fn determine_path_input_mode(paths: &[PathBuf], stdin0: bool) -> anyhow::Result<PathInputMode> {
     let has_dash = paths.iter().any(|path| path == Path::new("-"));
 
     if stdin0 {
@@ -253,7 +253,6 @@ fn main() -> Result<(), Error> {
                 PathInputMode::StdinNewlines => read_paths_from_stdin_lines()?,
                 PathInputMode::StdinNul => read_paths_from_stdin_nul()?,
             };
-            //
 
             // we can process these in a loop as there is no need to load them all into memory
             for filepath in file_paths {
@@ -275,10 +274,9 @@ fn main() -> Result<(), Error> {
                     )?,
                 }
 
-                match verify_args.fprint0 {
-                    true => write!(out, "\0")?,
-                    false => {}
-                };
+                if verify_args.fprint0 {
+                    write!(out, "\0")?;
+                }
             }
             Ok(())
         }
@@ -286,10 +284,8 @@ fn main() -> Result<(), Error> {
             let record_file_1 = compare_args.record1;
             let record_file_2 = compare_args.record2;
 
-            let record1 = Record::load_json(&record_file_1)
-                .expect(&format!("Unable to create Record from record file 1"));
-            let record2 = Record::load_json(&record_file_2)
-                .expect(&format!("Unable to create Record from record file 2"));
+            let record1 = Record::load_json(&record_file_1)?;
+            let record2 = Record::load_json(&record_file_2)?;
 
             // extract the records out of each
             let record1_entries: Vec<&records::HashedRecordEntry> =

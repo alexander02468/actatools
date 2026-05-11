@@ -1,11 +1,14 @@
 use std::fs::File;
-use std::io::{self, IsTerminal, Read};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 
 use actatools::paths::{Directory, FilePath};
 use actatools::recordcomparison::{self, MatchEngine, Render};
-use actatools::records::{self, Record, RecordIncludes, render_record};
-use anyhow::{Error, anyhow, bail};
+use actatools::records::{
+    self, Record, RecordIncludes, render_record, render_record_verification,
+    render_record_verification_compact,
+};
+use anyhow::{Error, bail};
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
@@ -59,8 +62,28 @@ struct BundleArgs {
 
 #[derive(Debug, Args)]
 struct VerifyArgs {
-    /// Specificiation File
-    record: PathBuf,
+    /// Record Files to analyze
+    records: Option<Vec<PathBuf>>,
+
+    /// Output to <FILE> instead of stdout
+    #[arg(short, long, value_name = "FILE")]
+    output: Option<PathBuf>,
+
+    /// Long output form
+    #[arg(long)]
+    long: bool,
+
+    /// Read NUL-separated paths from stdin.
+    ///
+    /// Intended for: find . -type f -print0 | acta-records record --stdin0
+    #[arg(long)]
+    stdin0: bool,
+
+    /// Writes NUL-separated entries to stdin.
+    ///
+    /// Intended for services that want to parse the --long reports
+    #[arg(long)]
+    fprint0: bool,
 }
 
 #[derive(Debug, Args)]
@@ -211,44 +234,52 @@ fn main() -> Result<(), Error> {
 
             Ok(())
         }
+
         Commands::Verify(verify_args) => {
-            // let record_path_str = verify_args.record;
-            let record = Record::load_json(&verify_args.record)?;
+            // error out if there are no args + no stdin
+            let record_files = verify_args.records.unwrap_or_default();
+            if record_files.is_empty() && !verify_args.stdin0 && io::stdin().is_terminal() {
+                let mut cmd = RecordArgs::augment_args(clap::Command::new("record"));
+                cmd.error(
+                    clap::error::ErrorKind::MissingRequiredArgument,
+                    "no input paths provided; pass paths, use `-` for stdin, or use `--stdin0`",
+                )
+                .exit();
+            }
 
-            let record_path = match verify_args.record.is_absolute() {
-                false => PathBuf::from("./").join(verify_args.record),
-                true => verify_args.record,
+            // we have 3 scenarios here,
+            let file_paths = match determine_path_input_mode(&record_files, verify_args.stdin0)? {
+                PathInputMode::ExplicitPaths => record_files,
+                PathInputMode::StdinNewlines => read_paths_from_stdin_lines()?,
+                PathInputMode::StdinNul => read_paths_from_stdin_nul()?,
             };
+            //
 
-            // let record_base_path = Directory::here();
-            let record_base_path = Directory::new(
-                record_path
-                    .parent()
-                    .ok_or_else(|| anyhow!("unable to get parent"))?,
-            )?;
+            // we can process these in a loop as there is no need to load them all into memory
+            for filepath in file_paths {
+                let record = Record::load_json(&filepath)?;
+                let filepath_str = filepath.to_string_lossy().to_string();
 
-            let new_record = record.recalculate_record(record_base_path)?;
+                let record_verification = record.verify()?;
 
-            // now just use the same compare code
-            let matcher = MatchEngine::new().with_filename_extractor();
+                let mut out = io::stdout();
 
-            // extract the records out of each
-            let record_orig_entries: Vec<&records::HashedRecordEntry> =
-                record.record_entries.iter().collect();
-            let record_new_entries: Vec<&records::HashedRecordEntry> =
-                new_record.record_entries.iter().collect();
+                match verify_args.long {
+                    true => {
+                        render_record_verification(&mut out, &filepath_str, &record_verification)?
+                    }
+                    false => render_record_verification_compact(
+                        &mut out,
+                        &filepath_str,
+                        &record_verification,
+                    )?,
+                }
 
-            let matches = matcher.match_record_entries(&record_orig_entries, &record_new_entries);
-
-            let record_diffs = recordcomparison::DiffEngine::diff_matches(matches);
-
-            let renderer = Render {
-                input1_label: record_path.to_string_lossy().to_string(),
-                input2_label: "Copied Version".to_string(),
-            };
-
-            let mut out = io::stdout();
-            renderer.render_to_screen(&record_diffs, &mut out)?;
+                match verify_args.fprint0 {
+                    true => write!(out, "\0")?,
+                    false => {},
+                };
+            }
             Ok(())
         }
         Commands::Compare(compare_args) => {

@@ -5,9 +5,10 @@
 
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     str::FromStr,
+    usize,
 };
 
 use anyhow::{Error, anyhow};
@@ -15,8 +16,11 @@ use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::paths::{Directory, FilePath, PathError};
-use crate::uid::UidDigest;
+use crate::{uid::{UidDigest, hash_digests_stable}};
+use crate::{
+    paths::{Directory, FilePath, PathError},
+    uid::hash_file,
+};
 
 const RECORD_ENTRY_LEN: usize = 32;
 
@@ -112,29 +116,10 @@ pub struct UnhashedRecordEntry {
     file: FilePath,
 }
 impl UnhashedRecordEntry {
-    /// Use the hasher to hash the file it is pointing at. Necessary for making a HashedRecordEntry
-    fn hash(&self) -> Result<UidDigest<RECORD_ENTRY_LEN>, Error> {
-        let f = File::open(&self.file.get_path()?)?;
-        let mut hasher = blake3::Hasher::new();
-        let mut reader = BufReader::new(f);
-        let mut buffer = [0u8; 64 * 1024];
-        loop {
-            let bytes_read = reader.read(&mut buffer)?;
-
-            if bytes_read == 0 {
-                break;
-            }
-
-            hasher.update(&buffer[..bytes_read]);
-        }
-        let digest: [u8; RECORD_ENTRY_LEN] =
-            hasher.finalize().as_bytes()[..RECORD_ENTRY_LEN].try_into()?;
-        Ok(UidDigest::<RECORD_ENTRY_LEN> { id: digest }) // 32 bytes
-    }
-
     /// Converts into a HashRecordEntry, consumes the UnhashedRecordEntry
     fn into_hashed_record(self) -> Result<HashedRecordEntry, Error> {
-        let digest = self.hash()?;
+        let digest = hash_file(&self.file)?;
+
         Ok(HashedRecordEntry {
             file: self.file,
             data_digest: digest,
@@ -148,6 +133,25 @@ pub struct HashedRecordEntry {
     pub data_digest: UidDigest<RECORD_ENTRY_LEN>,
 }
 
+impl HashedRecordEntry {
+    /// Rehashes its file and compares against what is already in it
+    fn verify<'a>(&'a self) -> Result<RecordEntryVerification<'a>, Error> {
+        let new_digest = hash_file(&self.file)?;
+
+        let digest_verification: HashVerification = match new_digest == self.data_digest {
+            true => HashVerification::Verified(new_digest),
+            false => HashVerification::MismatchedHash {
+                old: self.data_digest.clone(),
+                new: new_digest,
+            },
+        };
+        Ok(RecordEntryVerification {
+            file: &self.file,
+            hash_verification: digest_verification,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
     metadata: Option<RecordMetadata>,
@@ -156,27 +160,40 @@ pub struct Record {
 }
 
 impl Record {
-    // pub fn render_to<W: Write>(&self, out: &mut W) -> Result<(), Error> {
-    //     let json_self_string = self.as_json_string()?;
-    //     write!(out, "{json_self_string}")?;
-    //     writeln!(out, "")?;
-    //     out.flush()?;
+    /// Verifies the record
+    pub fn verify<'a>(&'a self) -> Result<RecordVerification<'a>, Error> {
+        // verify each record
+        let record_entry_verifications = self
+            .record_entries
+            .iter()
+            .map(|x| x.verify())
+            .collect::<Result<Vec<_>, Error>>()?;
 
-    //     Ok(())
-    // }
+        // reverify the record digest as well
+        let mut record_entry_digests: Vec<&UidDigest<RECORD_ENTRY_LEN>> =
+            Vec::with_capacity(record_entry_verifications.len());
+        for rv in &record_entry_verifications {
+            match &rv.hash_verification {
+                HashVerification::Verified(uid_digest) => record_entry_digests.push(uid_digest),
+                HashVerification::MismatchedHash { old: _, new } => record_entry_digests.push(new),
+            }
+        }
 
-    // /// Writes a JSON by converting to String then writing out
-    // pub fn write_json(&self, f_path: &Path) -> Result<(), Error> {
-    //     let mut f = File::create(f_path)?;
+        let new_digest = hash_digests_stable(record_entry_digests)?;
 
-    //     self.render_to(&mut f)?;
-    //     Ok(())
-    // }
+        let digest_verification = match new_digest == self.digest {
+            true => HashVerification::Verified(new_digest),
+            false => HashVerification::MismatchedHash {
+                old: self.digest.clone(),
+                new: new_digest,
+            },
+        };
 
-    // /// Converts to JSON using Serialize
-    // pub fn as_json_string(&self) -> Result<String, Error> {
-    //     Ok(serde_json::to_string_pretty(self)?)
-    // }
+        Ok(RecordVerification {
+            record_entry_verifications,
+            digest_verification,
+        })
+    }
 
     /// Loads a JSON using Deserialize
     pub fn load_json(path: &Path) -> Result<Self, Error> {
@@ -269,12 +286,38 @@ impl RecordMetadata {
 }
 
 #[derive(Debug, Clone)]
+pub struct RecordVerification<'a> {
+    record_entry_verifications: Vec<RecordEntryVerification<'a>>,
+    digest_verification: HashVerification,
+}
+
+#[derive(Debug, Clone)]
+struct RecordEntryVerification<'a> {
+    file: &'a FilePath,
+    hash_verification: HashVerification,
+}
+
+#[derive(Debug, Clone)]
+enum HashVerification {
+    Verified(UidDigest<RECORD_ENTRY_LEN>),
+    MismatchedHash {
+        old: UidDigest<RECORD_ENTRY_LEN>,
+        new: UidDigest<RECORD_ENTRY_LEN>,
+    },
+}
+
+#[derive(Debug, Clone)]
 enum RecordError {
     RelativePathCreationError,
+    // VerificationError,
 }
 impl std::fmt::Display for RecordError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Relative fiile path unable to be created")
+        match self {
+            RecordError::RelativePathCreationError => {
+                writeln!(f, "Relative file path unable to be created")
+            } // RecordError::VerificationError => writeln!(f, "Record unable to be created"),
+        }
     }
 }
 impl std::error::Error for RecordError {}
@@ -341,6 +384,98 @@ pub fn render_record<W: Write>(
     let view = RecordOutputView::from_record_relative_path(record, relative_base_directory)?;
     serde_json::to_writer_pretty(writer, &view)?;
 
+    Ok(())
+}
+
+/// Write a RecordVerification to a writeable object
+pub fn render_record_verification<W: Write>(
+    writer: &mut W,
+    record_label: &str,
+    record_verification: &RecordVerification,
+) -> Result<(), Error> {
+    let mut num_re_verified: usize = 0;
+    let mut num_re_failed: usize = 0;
+
+    for rv in &record_verification.record_entry_verifications {
+        match rv.hash_verification {
+            HashVerification::Verified(_) => num_re_verified += 1,
+            HashVerification::MismatchedHash { old: _, new: _ } => num_re_failed += 1,
+        }
+    }
+
+    writeln!(writer, "Record Verification")?;
+    writeln!(writer, "===================")?;
+    writeln!(writer, "")?;
+    writeln!(writer, "Summary")?;
+    writeln!(writer, "-------")?;
+    writeln!(writer, "{}", record_label)?;
+    writeln!(writer, "")?;
+
+    match record_verification.digest_verification {
+        HashVerification::Verified(uid_digest) => {
+            writeln!(writer, "               VERIFIED")?;
+            writeln!(writer, "     Expected  {}", uid_digest)?;
+            writeln!(writer, "   --> Actual  {}", uid_digest)?;
+        }
+        HashVerification::MismatchedHash { old, new } => {
+            writeln!(writer, "               FAILED")?;
+            writeln!(writer, "     Expected  {}", old)?;
+            writeln!(writer, "   --> Actual  {}", new)?;
+        }
+    }
+    writeln!(writer, "")?;
+    writeln!(writer, "  Num Records Verified  {}", num_re_verified)?;
+    writeln!(writer, "    Num Records Failed  {}", num_re_failed)?;
+    writeln!(writer, "  -----------------------------")?;
+    writeln!(
+        writer,
+        "                 Total  {}",
+        num_re_failed + num_re_verified
+    )?;
+    writeln!(writer, "")?;
+    writeln!(writer, "Record Entries")?;
+    writeln!(writer, "--------------")?;
+    for rv in &record_verification.record_entry_verifications {
+        writeln!(
+            writer,
+            "  File  {}",
+            rv.file.get_path_compact()?.to_string_lossy()
+        )?;
+
+        match rv.hash_verification {
+            HashVerification::Verified(uid_digest) => {
+                writeln!(writer, "                   VERIFIED")?;
+                writeln!(writer, "         Expected  {}", uid_digest)?;
+                writeln!(writer, "       --> Actual  {}", uid_digest)?;
+            }
+            HashVerification::MismatchedHash { old, new } => {
+                writeln!(writer, "                   FAILED")?;
+                writeln!(writer, "         Expected  {}", old)?;
+                writeln!(writer, "       --> Actual  {}", new)?;
+            }
+        }
+        writeln!(writer, "")?;
+    }
+    Ok(())
+}
+
+/// Write a RecordVerification compactly (single line) to a writeable object
+pub fn render_record_verification_compact<W: Write>(
+    write: &mut W,
+    record_label: &str,
+    record_verification: &RecordVerification,
+) -> Result<(), Error> {
+    let verification_status_str = match record_verification.digest_verification {
+        HashVerification::Verified(uid_digest) => {
+            format!("VERIFIED {:32}", uid_digest.compact_hex(32))
+        }
+        HashVerification::MismatchedHash { old, new } => format!(
+            "FAILED   {:14} -> {:14}",
+            old.compact_hex(14),
+            new.compact_hex(14)
+        ),
+    };
+    writeln!(write, "{:<32.32} {}", record_label, verification_status_str)?;
     Ok(())
 }
 

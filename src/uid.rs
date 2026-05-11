@@ -1,7 +1,11 @@
 // Copyright (C) 2026 Alexander Baker
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    fs::File,
+    io::{BufReader, Read},
+};
 
 use anyhow::{Error, bail};
 use polars::prelude::Scalar;
@@ -10,7 +14,7 @@ use serde::{
     de::{self, Visitor},
 };
 
-use crate::studycontrol::Branch;
+use crate::{paths::FilePath, studycontrol::Branch};
 
 // # of bytes to use in the digest length for the IDs. This affects naming
 pub const BRID_DIGEST_LEN: usize = 8;
@@ -170,11 +174,56 @@ impl std::fmt::Display for BrIdParseError {
 }
 
 /// Digest container of <N> bytes
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UidDigest<const N: usize> {
     pub id: [u8; N],
 }
 impl<const N: usize> UidDigest<N> {
+    /// Function that returns a Hex representation of compacted size width
+    /// If the full hex digest fits within `width`, the full digest is returned.
+    /// Otherwise, the digest is shortened with `...` in the middle.
+    ///
+
+    /// # Examples
+    ///
+    /// ```
+    /// # use actatools::uid::UidDigest;
+    /// let digest = UidDigest::<8> {
+    ///     id: [0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90],
+    /// };
+    ///
+    /// assert_eq!(
+    ///     digest.compact_hex(12),
+    ///     "abcd...67890"
+    /// );
+    ///
+    /// assert_eq!(
+    ///     digest.compact_hex(16),
+    ///     "abcdef1234567890"
+    /// );
+    /// ```
+    pub fn compact_hex(&self, width: usize) -> String {
+        let full = self.to_string();
+        if full.len() <= width {
+            return full;
+        }
+
+        // Need room for at least "a...b"
+        if width < 5 {
+            return full[..width.min(full.len())].to_string();
+        }
+        let ellipsis = "...";
+        let remaining = width - ellipsis.len();
+        let front_len = remaining / 2;
+        let back_len = remaining - front_len;
+        format!(
+            "{}{}{}",
+            &full[..front_len],
+            ellipsis,
+            &full[full.len() - back_len..]
+        )
+    }
+
     /// creates a UidDigest from a string slice, hashing the string bytes
     pub fn from_str_slice(string: &str) -> Result<Self, Error> {
         let mut buf: Vec<u8> = Vec::new();
@@ -344,6 +393,40 @@ impl<const N: usize> std::str::FromStr for UidDigest<N> {
         }
         Ok(UidDigest { id: bytes })
     }
+}
+
+/// Helper function to hash a file
+pub fn hash_file<const N: usize>(file: &FilePath) -> Result<UidDigest<N>, Error> {
+    let f = File::open(file.get_path()?)?;
+    let mut hasher = blake3::Hasher::new();
+    let mut reader = BufReader::new(f);
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        hasher.update(&buffer[..bytes_read]);
+    }
+    let digest: [u8; N] = hasher.finalize().as_bytes()[..N].try_into()?;
+    Ok(UidDigest::<N> { id: digest }) // 32 bytes
+}
+
+/// helper function to hash a set of digests stably
+pub fn hash_digests_stable<const N: usize>(
+    digests: Vec<&UidDigest<N>>,
+) -> Result<UidDigest<N>, Error> {
+    let mut hasher = blake3::Hasher::new();
+
+    for digest in digests {
+        hasher.update(&digest.id);
+    }
+
+    let digest: [u8; N] = hasher.finalize().as_bytes()[..N].try_into()?;
+
+    Ok(UidDigest { id: digest })
 }
 
 /// Tests for VarStepId, BrId, VId, UidDigest

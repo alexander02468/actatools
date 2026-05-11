@@ -1,0 +1,28 @@
+Record Verification
+===================
+
+Summary
+-------
+tests/fixtures/foo_foo2_record.json
+
+               VERIFIED
+     Expected  c4f70b77e72ef1d87998a172b426336c82f5a9b80cc4869b19e29dae6647c737
+   --> Actual  c4f70b77e72ef1d87998a172b426336c82f5a9b80cc4869b19e29dae6647c737
+
+  Num Records Verified  2
+    Num Records Failed  0
+  -----------------------------
+                 Total  2
+
+Record Entries
+--------------
+  File  foo.bar
+                   VERIFIED
+         Expected  9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c
+       --> Actual  9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c
+
+  File  foo2.bar
+                   VERIFIED
+         Expected  99ff9c6740efe27e636aa330624a28f19ee96f5f844d1eee0192590d07e6c245
+       --> Actual  99ff9c6740efe27e636aa330624a28f19ee96f5f844d1eee0192590d07e6c245
+

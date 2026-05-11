@@ -8,7 +8,7 @@ use actatools::records::{
     self, Record, RecordIncludes, render_record, render_record_verification,
     render_record_verification_compact,
 };
-use anyhow::{Error, bail};
+use anyhow::{Error, anyhow, bail};
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
@@ -46,7 +46,7 @@ struct RecordArgs {
 
     /// Options to set an Includes File
     #[arg(long)]
-    includes_file : Option<PathBuf>,
+    includes_file: Option<PathBuf>,
 
     /// Read NUL-separated paths from stdin.
     ///
@@ -186,7 +186,7 @@ fn main() -> Result<(), Error> {
             let output = record_args.output;
             let mut record_includes = RecordIncludes::new();
 
-            // we have 3 scenarios here,
+            // we have  scenarios here,
             let file_paths = match determine_path_input_mode(&record_files, record_args.stdin0)? {
                 PathInputMode::ExplicitPaths => record_files,
                 PathInputMode::StdinNewlines => read_paths_from_stdin_lines()?,

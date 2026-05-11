@@ -436,19 +436,22 @@ mod test_util_functions {
 
     use crate::paths::Directory;
 
-use super::*;
+    use super::*;
 
     #[test]
     fn test_hash_file() {
         let expected_foo_bar_digest: UidDigest<32> =
             UidDigest::from_str("9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c")
                 .unwrap();
-        
-        let foo_bar_filepath = FilePath::new(&PathBuf::from("tests/fixtures/foo.bar"), Some(Directory::here())).unwrap();
+
+        let foo_bar_filepath = FilePath::new(
+            &PathBuf::from("tests/fixtures/foo.bar"),
+            Some(Directory::here()),
+        )
+        .unwrap();
         let foo_bar_digest: UidDigest<32> = hash_file(&foo_bar_filepath).unwrap();
 
         assert_eq!(foo_bar_digest, expected_foo_bar_digest);
-
     }
 
     #[test]

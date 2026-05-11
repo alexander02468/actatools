@@ -429,6 +429,45 @@ pub fn hash_digests_stable<const N: usize>(
     Ok(UidDigest { id: digest })
 }
 
+#[cfg(test)]
+mod test_util_functions {
+
+    use std::{path::PathBuf, str::FromStr};
+
+    use crate::paths::Directory;
+
+use super::*;
+
+    #[test]
+    fn test_hash_file() {
+        let expected_foo_bar_digest: UidDigest<32> =
+            UidDigest::from_str("9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c")
+                .unwrap();
+        
+        let foo_bar_filepath = FilePath::new(&PathBuf::from("tests/fixtures/foo.bar"), Some(Directory::here())).unwrap();
+        let foo_bar_digest: UidDigest<32> = hash_file(&foo_bar_filepath).unwrap();
+
+        assert_eq!(foo_bar_digest, expected_foo_bar_digest);
+
+    }
+
+    #[test]
+    fn test_hash_vec() {
+        let digest1 = UidDigest::<8>::from_str("a3f91c7e4b08d2aa").unwrap();
+        let digest2 = UidDigest::<8>::from_str("09ce44f8a1b7d305").unwrap();
+
+        let expected_digest = UidDigest {
+            id: [199, 197, 113, 128, 184, 61, 83, 212],
+        };
+
+        let digests = vec![&digest1, &digest2];
+
+        let vec_digest = hash_digests_stable(digests).unwrap();
+
+        assert_eq!(vec_digest, expected_digest)
+    }
+}
+
 /// Tests for VarStepId, BrId, VId, UidDigest
 #[cfg(test)]
 mod test_uid_digest {

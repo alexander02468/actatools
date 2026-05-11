@@ -166,7 +166,8 @@ fn main() -> Result<(), Error> {
 
                     let vsr_uids = study_controller
                         .varsteps
-                        .keys().copied()
+                        .keys()
+                        .copied()
                         .collect::<Vec<VarStepId>>();
 
                     run_continuous(vsr_uids, &mut run_controller)?;

@@ -193,7 +193,13 @@ impl Serialize for FilePath {
     {
         let path = self.get_path_compact().map_err(serde::ser::Error::custom)?;
 
-        serializer.serialize_str(&path.to_string_lossy())
+        // normalize string with /, for windows/linux interoperability
+        let path_string = path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+
+        serializer.serialize_str(&path_string)
     }
 }
 

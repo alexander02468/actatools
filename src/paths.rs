@@ -236,6 +236,7 @@ mod test_file_path {
         assert!(matches!(test, FilePath::RelativeIncomplete(x) if x == path));
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_construct_absolute() {
         let path = PathBuf::from("/foo.bar");
@@ -243,6 +244,7 @@ mod test_file_path {
         assert!(matches!(test, FilePath::Absolute(x) if x == path));
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_construct_relative_with_base() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 

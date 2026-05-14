@@ -5,17 +5,22 @@
 
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     str::FromStr,
+    usize,
 };
 
 use anyhow::{Error, anyhow};
+use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::paths::{Directory, FilePath, PathError};
-use crate::uid::UidDigest;
+use crate::uid::{UidDigest, hash_digests_stable};
+use crate::{
+    paths::{Directory, FilePath, PathError},
+    uid::hash_file,
+};
 
 const RECORD_ENTRY_LEN: usize = 32;
 
@@ -25,7 +30,7 @@ const JSON_RECORD_FORMAT_VERSION: usize = 1;
 /// (which has the files hashed as well)
 #[derive(Debug, Clone)]
 pub struct RecordIncludes {
-    record_entries: Vec<UnhashedRecordEntry>,
+    pub record_entries: Vec<UnhashedRecordEntry>,
 }
 
 impl RecordIncludes {
@@ -85,23 +90,23 @@ impl RecordIncludes {
 
         let mut hashed_record_entries: Vec<HashedRecordEntry> =
             Vec::with_capacity(self.record_entries.len());
-        let mut record_hasher = blake3::Hasher::new();
+
+        // collect all the digests, hash at the end (for order agnostic hashing)
+        let mut digests_vec: Vec<UidDigest<RECORD_ENTRY_LEN>> =
+            Vec::with_capacity(self.record_entries.len());
 
         for record_entry in self.record_entries.into_iter() {
             let hashed_record = record_entry.into_hashed_record()?;
-            let digest = hashed_record.data_digest;
-            record_hasher.update(&digest.id);
+            digests_vec.push(hashed_record.data_digest);
             hashed_record_entries.push(hashed_record);
         }
 
-        let digest = record_hasher.finalize();
-        let digest: [u8; RECORD_ENTRY_LEN] =
-            digest.as_bytes()[..RECORD_ENTRY_LEN].try_into().unwrap();
+        let digest = hash_digests_stable(digests_vec.iter().collect())?;
 
         Ok(Record {
             metadata: Some(RecordMetadata::current()?),
             record_entries: hashed_record_entries,
-            digest: UidDigest { id: digest },
+            digest,
         })
     }
 }
@@ -111,29 +116,10 @@ pub struct UnhashedRecordEntry {
     file: FilePath,
 }
 impl UnhashedRecordEntry {
-    /// Use the hasher to hash the file it is pointing at. Necessary for making a HashedRecordEntry
-    fn hash(&self) -> Result<UidDigest<RECORD_ENTRY_LEN>, Error> {
-        let f = File::open(&self.file.get_path()?)?;
-        let mut hasher = blake3::Hasher::new();
-        let mut reader = BufReader::new(f);
-        let mut buffer = [0u8; 64 * 1024];
-        loop {
-            let bytes_read = reader.read(&mut buffer)?;
-
-            if bytes_read == 0 {
-                break;
-            }
-
-            hasher.update(&buffer[..bytes_read]);
-        }
-        let digest: [u8; RECORD_ENTRY_LEN] =
-            hasher.finalize().as_bytes()[..RECORD_ENTRY_LEN].try_into()?;
-        Ok(UidDigest::<RECORD_ENTRY_LEN> { id: digest }) // 32 bytes
-    }
-
     /// Converts into a HashRecordEntry, consumes the UnhashedRecordEntry
     fn into_hashed_record(self) -> Result<HashedRecordEntry, Error> {
-        let digest = self.hash()?;
+        let digest = hash_file(&self.file)?;
+
         Ok(HashedRecordEntry {
             file: self.file,
             data_digest: digest,
@@ -147,6 +133,25 @@ pub struct HashedRecordEntry {
     pub data_digest: UidDigest<RECORD_ENTRY_LEN>,
 }
 
+impl HashedRecordEntry {
+    /// Rehashes its file and compares against what is already in it
+    fn verify<'a>(&'a self) -> Result<RecordEntryVerification<'a>, Error> {
+        let new_digest = hash_file(&self.file)?;
+
+        let digest_verification: HashVerification = match new_digest == self.data_digest {
+            true => HashVerification::Verified(new_digest),
+            false => HashVerification::MismatchedHash {
+                old: self.data_digest.clone(),
+                new: new_digest,
+            },
+        };
+        Ok(RecordEntryVerification {
+            file: &self.file,
+            hash_verification: digest_verification,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
     metadata: Option<RecordMetadata>,
@@ -155,26 +160,39 @@ pub struct Record {
 }
 
 impl Record {
-    pub fn render_to<W: Write>(&self, out: &mut W) -> Result<(), Error> {
-        let json_self_string = self.as_json_string()?;
-        write!(out, "{json_self_string}")?;
-        writeln!(out, "")?;
-        out.flush()?;
+    /// Verifies the record
+    pub fn verify<'a>(&'a self) -> Result<RecordVerification<'a>, Error> {
+        // verify each record
+        let record_entry_verifications = self
+            .record_entries
+            .iter()
+            .map(|x| x.verify())
+            .collect::<Result<Vec<_>, Error>>()?;
 
-        Ok(())
-    }
+        // reverify the record digest as well
+        let mut record_entry_digests: Vec<&UidDigest<RECORD_ENTRY_LEN>> =
+            Vec::with_capacity(record_entry_verifications.len());
+        for rv in &record_entry_verifications {
+            match &rv.hash_verification {
+                HashVerification::Verified(uid_digest) => record_entry_digests.push(uid_digest),
+                HashVerification::MismatchedHash { old: _, new } => record_entry_digests.push(new),
+            }
+        }
 
-    /// Writes a JSON by converting to String then writing out
-    pub fn write_json(&self, f_path: &Path) -> Result<(), Error> {
-        let mut f = File::create(f_path)?;
+        let new_digest = hash_digests_stable(record_entry_digests)?;
 
-        self.render_to(&mut f)?;
-        Ok(())
-    }
+        let digest_verification = match new_digest == self.digest {
+            true => HashVerification::Verified(new_digest),
+            false => HashVerification::MismatchedHash {
+                old: self.digest.clone(),
+                new: new_digest,
+            },
+        };
 
-    /// Converts to JSON using Serialize
-    pub fn as_json_string(&self) -> Result<String, Error> {
-        Ok(serde_json::to_string_pretty(self)?)
+        Ok(RecordVerification {
+            record_entry_verifications,
+            digest_verification,
+        })
     }
 
     /// Loads a JSON using Deserialize
@@ -267,6 +285,207 @@ impl RecordMetadata {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RecordVerification<'a> {
+    record_entry_verifications: Vec<RecordEntryVerification<'a>>,
+    digest_verification: HashVerification,
+}
+
+#[derive(Debug, Clone)]
+struct RecordEntryVerification<'a> {
+    file: &'a FilePath,
+    hash_verification: HashVerification,
+}
+
+#[derive(Debug, Clone)]
+enum HashVerification {
+    Verified(UidDigest<RECORD_ENTRY_LEN>),
+    MismatchedHash {
+        old: UidDigest<RECORD_ENTRY_LEN>,
+        new: UidDigest<RECORD_ENTRY_LEN>,
+    },
+}
+
+#[derive(Debug, Clone)]
+enum RecordError {
+    RelativePathCreationError,
+    BundleFileExists,
+    // VerificationError,
+}
+impl std::fmt::Display for RecordError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RecordError::RelativePathCreationError => {
+                writeln!(f, "Relative file path unable to be created")
+            } // RecordError::VerificationError => writeln!(f, "Record unable to be created"),
+            RecordError::BundleFileExists => {
+                writeln!(
+                    f,
+                    "File already exists during bundle creation, are filenames identical?"
+                )
+            }
+        }
+    }
+}
+impl std::error::Error for RecordError {}
+
+/// Views that allow for custom output views --usually for shaping the filepaths at write time
+#[derive(Debug, serde::Serialize)]
+struct RecordOutputView<'a> {
+    metadata: &'a Option<RecordMetadata>,
+    record_entries: Vec<HashedRecordEntryOutputView<'a>>,
+    digest: &'a UidDigest<RECORD_ENTRY_LEN>,
+}
+
+impl<'a> RecordOutputView<'a> {
+    fn from_record_relative_path(
+        record: &'a Record,
+        relative_base_directory: Option<Directory>,
+    ) -> Result<Self, Error> {
+        let relative_directory = match relative_base_directory {
+            Some(d) => d,
+            None => Directory::here(),
+        };
+
+        // build the record entries with the adjusted directory paths
+        let mut record_entries: Vec<HashedRecordEntryOutputView<'a>> =
+            Vec::with_capacity(record.record_entries.len());
+
+        for record in &record.record_entries {
+            // fix the filepath
+            let orig_path = record.file.get_path_compact()?;
+
+            let relative_path = diff_paths(orig_path, relative_directory.as_path())
+                .ok_or_else(|| RecordError::RelativePathCreationError)?;
+
+            let new_path = FilePath::new(&relative_path, Some(relative_directory.clone()))?;
+
+            let new_record_entry = HashedRecordEntryOutputView {
+                file: new_path.clone(),
+                data_digest: &record.data_digest,
+            };
+
+            record_entries.push(new_record_entry);
+        }
+
+        Ok(RecordOutputView {
+            metadata: &record.metadata,
+            record_entries,
+            digest: &record.digest,
+        })
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+struct HashedRecordEntryOutputView<'a> {
+    file: FilePath,
+    data_digest: &'a UidDigest<RECORD_ENTRY_LEN>,
+}
+
+/// Write a Record to the writeable object, where the reference directory can be set
+pub fn render_record<W: Write>(
+    record: &Record,
+    writer: &mut W,
+    relative_base_directory: Option<Directory>,
+) -> Result<(), Error> {
+    let view = RecordOutputView::from_record_relative_path(record, relative_base_directory)?;
+    serde_json::to_writer_pretty(writer, &view)?;
+
+    Ok(())
+}
+
+/// Write a RecordVerification to a writeable object
+pub fn render_record_verification<W: Write>(
+    writer: &mut W,
+    record_label: &str,
+    record_verification: &RecordVerification,
+) -> Result<(), Error> {
+    let mut num_re_verified: usize = 0;
+    let mut num_re_failed: usize = 0;
+
+    for rv in &record_verification.record_entry_verifications {
+        match rv.hash_verification {
+            HashVerification::Verified(_) => num_re_verified += 1,
+            HashVerification::MismatchedHash { old: _, new: _ } => num_re_failed += 1,
+        }
+    }
+
+    writeln!(writer, "Record Verification")?;
+    writeln!(writer, "===================")?;
+    writeln!(writer, "")?;
+    writeln!(writer, "Summary")?;
+    writeln!(writer, "-------")?;
+    writeln!(writer, "{}", record_label)?;
+    writeln!(writer, "")?;
+
+    match record_verification.digest_verification {
+        HashVerification::Verified(uid_digest) => {
+            writeln!(writer, "               VERIFIED")?;
+            writeln!(writer, "     Expected  {}", uid_digest)?;
+            writeln!(writer, "   --> Actual  {}", uid_digest)?;
+        }
+        HashVerification::MismatchedHash { old, new } => {
+            writeln!(writer, "               FAILED")?;
+            writeln!(writer, "     Expected  {}", old)?;
+            writeln!(writer, "   --> Actual  {}", new)?;
+        }
+    }
+    writeln!(writer, "")?;
+    writeln!(writer, "  Num Records Verified  {}", num_re_verified)?;
+    writeln!(writer, "    Num Records Failed  {}", num_re_failed)?;
+    writeln!(writer, "  -----------------------------")?;
+    writeln!(
+        writer,
+        "                 Total  {}",
+        num_re_failed + num_re_verified
+    )?;
+    writeln!(writer, "")?;
+    writeln!(writer, "Record Entries")?;
+    writeln!(writer, "--------------")?;
+    for rv in &record_verification.record_entry_verifications {
+        writeln!(
+            writer,
+            "  File  {}",
+            rv.file.get_path_compact()?.to_string_lossy()
+        )?;
+
+        match rv.hash_verification {
+            HashVerification::Verified(uid_digest) => {
+                writeln!(writer, "                   VERIFIED")?;
+                writeln!(writer, "         Expected  {}", uid_digest)?;
+                writeln!(writer, "       --> Actual  {}", uid_digest)?;
+            }
+            HashVerification::MismatchedHash { old, new } => {
+                writeln!(writer, "                   FAILED")?;
+                writeln!(writer, "         Expected  {}", old)?;
+                writeln!(writer, "       --> Actual  {}", new)?;
+            }
+        }
+        writeln!(writer, "")?;
+    }
+    Ok(())
+}
+
+/// Write a RecordVerification compactly (single line) to a writeable object
+pub fn render_record_verification_compact<W: Write>(
+    write: &mut W,
+    record_label: &str,
+    record_verification: &RecordVerification,
+) -> Result<(), Error> {
+    let verification_status_str = match record_verification.digest_verification {
+        HashVerification::Verified(uid_digest) => {
+            format!("VERIFIED {:32}", uid_digest.compact_hex(32))
+        }
+        HashVerification::MismatchedHash { old, new } => format!(
+            "FAILED   {:14} -> {:14}",
+            old.compact_hex(14),
+            new.compact_hex(14)
+        ),
+    };
+    writeln!(write, "{:<32.32} {}", record_label, verification_status_str)?;
+    Ok(())
+}
+
 /// Copies all the files in the RecordIncludes to output_directory, writing a new record_includes + manifest.json
 pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Result<(), Error> {
     // create the directory if it does not exist, do not allow for super nested directories to be autocreated
@@ -301,6 +520,11 @@ pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Resul
         let file_from = &unhashed_record_entry.file.get_path()?;
         let file_to = &output_dir.join(file_from_name);
 
+        // quick and dirty to catch if there's already a filename that will be overwritten:
+        if file_to.exists() {
+            Err(RecordError::BundleFileExists)?
+        }
+
         std::fs::copy(file_from, file_to)?;
     }
 
@@ -314,7 +538,10 @@ pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Resul
     record_includes.extend_includes_file(&includes_path)?;
     let record = record_includes.into_record()?;
 
-    record.write_json(&output_dir.join("manifest.json"))?;
+    let mut f = File::create(&output_dir.join("record.json"))?;
+    let output_directory = Directory::new(output_dir)?;
+
+    render_record(&record, &mut f, Some(output_directory))?;
 
     Ok(())
 }
@@ -403,6 +630,8 @@ mod test_unhashed_record_entry {
 mod test_record {
     use std::path::{PathBuf, absolute};
 
+    use super::*;
+
     use crate::{
         paths::{Directory, FilePath},
         records::RecordIncludes,
@@ -434,10 +663,12 @@ mod test_record {
         record_res.metadata = None; // so we don't deal with timestamp differences
 
         let mut buffer: Vec<u8> = Vec::new();
-        record_res.render_to(&mut buffer).unwrap();
+
+        // create a render view
+        render_record(&record_res, &mut buffer, None).unwrap();
         let output = String::from_utf8(buffer).unwrap();
 
-        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}\n".to_string();
+        let gold_string = "{\n  \"metadata\": null,\n  \"record_entries\": [\n    {\n      \"file\": \"tests/fixtures/foo.bar\",\n      \"data_digest\": \"9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c\"\n    }\n  ],\n  \"digest\": \"2ecb34d99efafac8531a93575adf640155b5c4650d7f530e669a59f146b252c0\"\n}".to_string();
 
         assert_eq!(output, gold_string);
     }

@@ -1,0 +1,2 @@
+tests/fixtures/foo_record.json   VERIFIED 2ecb34d99efafa...69a59f146b252c0
+tests/fixtures/foo_foo2_record.j VERIFIED c4f70b77e72ef1...9e29dae6647c737

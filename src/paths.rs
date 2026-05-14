@@ -47,6 +47,11 @@ impl Directory {
     pub fn new(path: impl Into<PathBuf>) -> Result<Self, PathError> {
         let path = path.into();
 
+        // if the path is empty, assume it is real
+        if path.as_os_str().is_empty() {
+            return Ok(Directory::here());
+        }
+
         if !path.is_dir() {
             return Err(PathError::NotADirectory(path));
         }
@@ -188,7 +193,14 @@ impl Serialize for FilePath {
     {
         let path = self.get_path_compact().map_err(serde::ser::Error::custom)?;
 
-        serializer.serialize_str(&path.to_string_lossy())
+        // normalize string with /, for windows/linux interoperability
+        let path_string = path
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+
+        serializer.serialize_str(&path_string)
     }
 }
 
@@ -224,6 +236,7 @@ mod test_file_path {
         assert!(matches!(test, FilePath::RelativeIncomplete(x) if x == path));
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_construct_absolute() {
         let path = PathBuf::from("/foo.bar");
@@ -231,6 +244,7 @@ mod test_file_path {
         assert!(matches!(test, FilePath::Absolute(x) if x == path));
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_construct_relative_with_base() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 
@@ -241,6 +255,7 @@ mod test_file_path {
         );
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_construct_absolute_and_base() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 
@@ -249,6 +264,7 @@ mod test_file_path {
         assert!(test.is_err())
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_get_base_dir_path() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 
@@ -257,6 +273,7 @@ mod test_file_path {
         assert_eq!(test.get_base_dir_path().unwrap(), PathBuf::from("/foo/"));
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_path() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 
@@ -266,6 +283,7 @@ mod test_file_path {
         assert_eq!(test.get_path().unwrap(), path);
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_get_path_compact() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 
@@ -283,6 +301,7 @@ mod test_file_path {
     }
 
     // serialization/deserialization test
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn uid_digest_round_trips_through_json() {
         let base = Directory(PathBuf::from("/foo/")); // override the directory check 
@@ -307,6 +326,7 @@ mod test_file_path {
         assert!(base.is_ok());
     }
 
+    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
     #[test]
     fn test_construct_invalid_directory() {
         let base = Directory::new(PathBuf::from("/foo")); // override the directory check

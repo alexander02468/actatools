@@ -132,7 +132,7 @@ fn main() -> Result<(), Error> {
                     match next_vsr_option {
                         Some(vsr_uid) => run_controller
                             .run_vsr(vsr_uid)
-                            .expect(&format!("Problem occured while running {vsr_uid}")),
+                            .unwrap_or_else(|_| panic!("Problem occured while running {vsr_uid}")),
                         None => println!("No VarSteps available to run"),
                     }
                     Ok(())
@@ -166,8 +166,8 @@ fn main() -> Result<(), Error> {
 
                     let vsr_uids = study_controller
                         .varsteps
-                        .iter()
-                        .map(|(x, _)| x.clone())
+                        .keys()
+                        .copied()
                         .collect::<Vec<VarStepId>>();
 
                     run_continuous(vsr_uids, &mut run_controller)?;

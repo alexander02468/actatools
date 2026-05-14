@@ -18,8 +18,8 @@ use anyhow::{Context, Error, anyhow, bail};
 use crate::{
     // manifest::{ManifestSpec, RecordSpec, RecordType},
     configparsing::{StepLoc, TemplatedStringPart},
-    paths::{self, FilePath},
-    records::RecordIncludes,
+    paths::{self, Directory, FilePath},
+    records::{RecordIncludes, render_record},
     studyconfig::StudyConfiguration,
     studycontrol::{Branch, StudyController, VarStepRunStyle},
     uid::VarStepId,
@@ -590,7 +590,13 @@ impl VarStepRunner {
         new_record_includes.extend_includes_file(&includes_path)?;
 
         let records = new_record_includes.into_record()?;
-        records.write_json(&run_dir.join("record.json"))?;
+
+        let mut f = File::create(&run_dir.join("record.json"))?;
+
+        let run_directory = Directory::new(run_dir)?;
+
+        render_record(&records, &mut f, Some(run_directory))?;
+
         Ok(())
     }
 

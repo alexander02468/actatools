@@ -90,23 +90,23 @@ impl RecordIncludes {
 
         let mut hashed_record_entries: Vec<HashedRecordEntry> =
             Vec::with_capacity(self.record_entries.len());
-        let mut record_hasher = blake3::Hasher::new();
+
+        // collect all the digests, hash at the end (for order agnostic hashing)
+        let mut digests_vec: Vec<UidDigest<RECORD_ENTRY_LEN>> =
+            Vec::with_capacity(self.record_entries.len());
 
         for record_entry in self.record_entries.into_iter() {
             let hashed_record = record_entry.into_hashed_record()?;
-            let digest = hashed_record.data_digest;
-            record_hasher.update(&digest.id);
+            digests_vec.push(hashed_record.data_digest);
             hashed_record_entries.push(hashed_record);
         }
 
-        let digest = record_hasher.finalize();
-        let digest: [u8; RECORD_ENTRY_LEN] =
-            digest.as_bytes()[..RECORD_ENTRY_LEN].try_into().unwrap();
+        let digest = hash_digests_stable(digests_vec.iter().collect())?;
 
         Ok(Record {
             metadata: Some(RecordMetadata::current()?),
             record_entries: hashed_record_entries,
-            digest: UidDigest { id: digest },
+            digest,
         })
     }
 }

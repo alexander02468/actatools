@@ -136,7 +136,7 @@ struct HashHexMatchStrategy;
 impl HashHexMatchStrategy {
     /// Helper function to extract the HashHex
     fn extract_key_hashhex(record: &HashedRecordEntry) -> Option<ComparisonKey> {
-        let k = ComparisonKey::HashedHex(format!("{}", record.data_digest.compact_hex(8)));
+        let k = ComparisonKey::HashedHex(format!("{}", record.data_digest));
         Some(k)
     }
 }

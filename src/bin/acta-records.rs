@@ -44,10 +44,6 @@ struct RecordArgs {
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
-    /// Options to set an Includes File
-    #[arg(long)]
-    includes_file: Option<PathBuf>,
-
     /// Read NUL-separated paths from stdin.
     ///
     /// Intended for: find . -type f -print0 | acta-records record --stdin0
@@ -58,10 +54,12 @@ struct RecordArgs {
 #[derive(Debug, Args)]
 struct BundleArgs {
     /// Includes File that lists what should be in the Record
-    includes_file: String,
+    #[arg(long, value_name = "FILE")]
+    includes_file: PathBuf,
 
     /// Output Directory
-    output_directory: String,
+    #[arg(long, value_name = "DIRECTORY")]
+    output_directory: PathBuf,
 }
 
 #[derive(Debug, Args)]

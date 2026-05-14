@@ -28,7 +28,7 @@ No Change
 ---------
 
 [0000] = SAME
-  key:        (Hash)  9b...18c
+  key:        (Hash)  9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c
   Record 1:     tests/fixtures/foo.bar
   Record 2:     ../foo.bar
   digest:     9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c

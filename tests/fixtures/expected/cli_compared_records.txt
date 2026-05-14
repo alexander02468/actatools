@@ -4,18 +4,16 @@ Record comparison
 Inputs
 ------
 
-input1: tests/fixtures/expected/cli_record_root_rel_1.json
-input2: tests/fixtures/expected/cli_record_2.json
+Record 1: tests/fixtures/expected/cli_record_root_rel_1.json
+Record 2: tests/fixtures/expected/cli_record_2.json
 
 Summary
 -------
 
-  =  Same               1
-  ~  Changed            0
-  +  Added              0
-  -  Removed            1
-  !  Undetermined       0
-  !  Undetermined       0
+  =  Same                   1
+  ~  Changed                0
+  !  Undetermined (1)       1
+  !  Undetermined (2)       0
   -----------------------
      Total              2
 
@@ -24,21 +22,29 @@ Legend
 
   =  Same           record matched and digest is unchanged
   ~  Changed        record matched but digest changed
-  +  Added          record exists only in input2
-  -  Removed        record exists only in input1
-  !  Undetermined   matcher could not safely pair records
+  !  Undetermined   matcher could not match record
 
-Results
--------
+No Change
+---------
 
-[0001] = SAME
-  key:        filename = foo.bar
-  input1:     tests/fixtures/foo.bar
-  input2:     ../foo.bar
+[0000] = SAME
+  key:        (Hash)  9b...18c
+  Record 1:     tests/fixtures/foo.bar
+  Record 2:     ../foo.bar
   digest:     9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c
 
-[0002] - REMOVED
-  key:        filename = foo2.bar
-  input1:     tests/fixtures/foo2.bar
-  digest:     99ff9c6740efe27e636aa330624a28f19ee96f5f844d1eee0192590d07e6c245
+Changed
+-------
+(None)
 
+Undetermined Record 1
+---------------------
+
+[0000] ! UNDETERMINED
+  key:        (FileName)  foo2.bar
+  Record:     tests/fixtures/foo2.bar
+  digest:     99ff9c6740efe27e636aa330624a28f19ee96f5f844d1eee0192590d07e6c245 
+
+Undetermined Record 2
+---------------------
+(None)

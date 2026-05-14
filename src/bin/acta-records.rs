@@ -3,12 +3,12 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 
 use actatools::paths::{Directory, FilePath};
-use actatools::recordcomparison::{self, MatchEngine, Render};
+use actatools::recordcomparison::{MatchEngine, Render};
 use actatools::records::{
     self, Record, RecordIncludes, render_record, render_record_verification,
     render_record_verification_compact,
 };
-use anyhow::{Error, anyhow, bail};
+use anyhow::{Error, bail};
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
@@ -297,10 +297,12 @@ fn main() -> Result<(), Error> {
             let record2_entries: Vec<&records::HashedRecordEntry> =
                 record2.record_entries.iter().collect();
 
-            let matcher = MatchEngine::new().with_filename_extractor();
-            let matches = matcher.match_record_entries(&record1_entries, &record2_entries);
+            let matcher = MatchEngine::new()
+                .with_hash_match_strategy()
+                .with_filename_match_strategy();
+            let partitioned_matches = matcher.apply_strategies(record1_entries, record2_entries);
 
-            let record_diffs = recordcomparison::DiffEngine::diff_matches(matches);
+            let partitioned_diffs = partitioned_matches.into_partitioned_diffs()?;
 
             let renderer = Render {
                 input1_label: record_file_1.to_string_lossy().to_string(),
@@ -308,7 +310,7 @@ fn main() -> Result<(), Error> {
             };
 
             let mut out = io::stdout();
-            renderer.render_to_screen(&record_diffs, &mut out)?;
+            renderer.render_to_screen(&partitioned_diffs, &mut out)?;
             Ok(())
         }
     }

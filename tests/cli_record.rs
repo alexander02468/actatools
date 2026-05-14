@@ -1,7 +1,7 @@
 // tests/cli_manifest.rs
 
 use assert_cmd::Command;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::Value;
 

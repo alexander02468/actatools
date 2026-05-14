@@ -233,8 +233,7 @@ fn main() -> Result<(), Error> {
 
             let output_dir = PathBuf::from(bundle_args.output_directory);
 
-            records::bundle(record_includes, &output_dir)
-                .expect("An error occured while bundling the files");
+            records::bundle(record_includes, &output_dir)?;
 
             Ok(())
         }

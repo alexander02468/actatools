@@ -309,6 +309,7 @@ enum HashVerification {
 #[derive(Debug, Clone)]
 enum RecordError {
     RelativePathCreationError,
+    BundleFileExists,
     // VerificationError,
 }
 impl std::fmt::Display for RecordError {
@@ -317,6 +318,12 @@ impl std::fmt::Display for RecordError {
             RecordError::RelativePathCreationError => {
                 writeln!(f, "Relative file path unable to be created")
             } // RecordError::VerificationError => writeln!(f, "Record unable to be created"),
+            RecordError::BundleFileExists => {
+                writeln!(
+                    f,
+                    "File already exists during bundle creation, are filenames identical?"
+                )
+            }
         }
     }
 }
@@ -512,6 +519,11 @@ pub fn bundle(record_includes: RecordIncludes, output_directory: &Path) -> Resul
         writeln!(f_includes, "{file_from_name}")?;
         let file_from = &unhashed_record_entry.file.get_path()?;
         let file_to = &output_dir.join(file_from_name);
+
+        // quick and dirty to catch if there's already a filename that will be overwritten:
+        if file_to.exists() {
+            Err(RecordError::BundleFileExists)?
+        }
 
         std::fs::copy(file_from, file_to)?;
     }

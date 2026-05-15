@@ -169,7 +169,7 @@ If you want to see the longer audit-like verification, you can pass the --long o
 ``` console
 $ acta-records verify record.json --long
 Record Verification
-
+```
 The command `compare` compares two Records, aligning files and checking their hash values against one another. File alignment is a potential issue as different records, likely being generated at different times, can have different paths -- making it difficult to match each entry to each other.
 
 Entries are aligned using a tiered approach, attempting to align by:
@@ -181,7 +181,7 @@ Entries that cannot be uniquely matched are grouped together as "undetermined" i
 
 ``` console
 $ acta-study compare record.json record1.json
-
+```
 Record comparison
 
 The command `bundle` bundles a set of a file together into a directory. It is intended as an easy way to create an evidence or archival bundle of files.

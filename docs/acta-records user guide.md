@@ -90,9 +90,9 @@ If the digest is also cryptographically signed, that means that a 3rd party inje
 Several commands can utilize `stdin` for path inputs all commands use `stdout` for displaying the results. Specifically, both `record`, `verify`, and `bundle` can use `stdin`. By convention, the argument after the command is then `-` but this is optional -- omitting this will still work.
 
 Thus, these two are equivalent:
-```
-> file1 file2 | acta-records record - --output output.json
-> file1 file2 | acta-records record --output output.json
+``` console
+$ file1 file2 | acta-records record - --output output.json
+$ file1 file2 | acta-records record --output output.json
 ```
 
 If no `--output` is specified, the output is written to `stdout`. While convenient, note that all paths are relative to your current directory *not* where the output is written (as there is no way to know where you are redirecting the output). As such, it is recommended you use the `--output` option when possible.
@@ -101,16 +101,16 @@ If no `--output` is specified, the output is written to `stdout`. While convenie
 
 `record` is the primary command to hash file contents and construct Records (i.e., a file manifest). The most common usage is by passing it a list of files. If `--output` is not specified, it will print the JSON to the `stdout` (the screen).
 
-``` bash
-> acta-records record example_file_1.txt example_file_1_copy.txt example_file_2.txt --output record.json
+``` console
+$ acta-records record example_file_1.txt example_file_1_copy.txt example_file_2.txt --output record.json
 ```
 
 > You can also instead redirect the stdout to a file, but relative paths cannot be inferred if it is redirected to another folder.
 
 `record` can also read from stdin, which allows for chaining through pipes.
 
-``` bash
-> ls *.txt | acta-tools record - > record.json
+``` console
+$ ls *.txt | acta-tools record - > record.json
 ```
 
 `record` can also read an Includes File (with option `--includes-file`) which is a text file with a list of files to include. An example can be found in [/examples/acta-records/record.includes](/examples/acta-records/record.includes).
@@ -121,7 +121,7 @@ content hash values are portable across filesystems and CPU architectures.
 
 Hashes are 32 bytes (256 bit) in length, represented in these files as a 64 character Hex string.
 
-``` bash
+``` console
 {
   "metadata": {
     "record_format": 1,
@@ -146,7 +146,7 @@ Hashes are 32 bytes (256 bit) in length, represented in these files as a 64 char
     }
   ],
   "digest": "9007586de5dc6d0067aa6642beba182d860305108c3011c27d8709abb69d62ad"
-}%
+}
 ```
 
 Note that the `file` location is relative to where the Record is written, *not* to the current directory. This increases portability, as long as the Record and its hashed files are moved together, the Record remains well-defined.
@@ -157,13 +157,8 @@ The command `verify` re-hashes the files in a Record(s) and verifies that they h
 lists a full report for each input. Multiple Records can be verified at once and each input is given a line in the on
 the output. Outputs are written to `stdout`.
 
-``` bash
-> acta-records verify record.json
-```
-
-results in
-
-``` bash
+``` console
+$ acta-records verify record.json
 record.json                      VERIFIED 9007586de5dc6d...d8709abb69d62ad
 ```
 
@@ -171,11 +166,8 @@ which says that the contents of the record.json are all verified. The files are 
 
 If you want to see the longer audit-like verification, you can pass the --long option.
 
-``` bash
-> acta-records verify record.json --long
-```
-
-``` bash
+``` console
+$ acta-records verify record.json --long
 Record Verification
 ===================
 
@@ -215,12 +207,12 @@ Here, all the files are shown with their actual digest and recalculated digests.
 
 Multiple files and reading in via `stdin` is supported as well.
 
-```bash
-> acta-records verify record.json record1.json
-> ls *.json | acta-records verify
+```console
+$ acta-records verify record.json record1.json
+$ ls *.json | acta-records verify
 ```
 
-``` bash
+``` console
 record_wrong.json                FAILED   90075...9d62ad -> 90075...9d62ad
 record.json                      VERIFIED 9007586de5dc6d...d8709abb69d62ad
 record1.json                     VERIFIED 0ee13d328ff818...6069af8e44ffa3e
@@ -240,11 +232,9 @@ Entries are aligned using a tiered approach, attempting to align by:
 
 Entries that cannot be uniquely matched are grouped together as "undetermined" in the comparison report. 
 
-``` bash
-> acta-study compare record.json record1.json
-```
+``` console
+$ acta-study compare record.json record1.json
 
-``` bash
 Record comparison
 =================
 

@@ -1,11 +1,11 @@
-# ActaRecords user guide
+# ActaRecords User Guide
 
 Version 0.3.0
 
 [1. Introduction](#1-introduction) \
 [2. Installation](#2-installation) \
 [3. System Support](#3-system-support) \
-[4. Hashing, Reproducibility, and Provenance](#4-hashing-reproducibility-and-provenance) \
+[4. Hashing and reproducibility](#4-hashing-and-reproducibility) \
 [5. Commands](#5-commands)
 
 ## 1. Introduction
@@ -69,7 +69,7 @@ Hashes are the results of a Hash Function, which maps values onto another set of
 
 For our usage, the idea is quite simple: can we use a number (or set of bytes) that uniquely identifies an object, and is portable across sessions, computers, storage systems, etc. In ActaRcords, we use a BLAKE3 hashing algorithm to go through all the bytes of a file and create a unique identifier. This single value, which represents the contents of the file compressed to a single byte array, is referred to as a *digest*. Hash function such as SHA-256 or BLAKE3 are designed to be very sensitive to the bytes -- single byte changes will intentionally create wildly different hashes. Therefore, small changes in a file are easily detectable.
 
-A digest is a hash that is used to represent the data inside a file. 
+A digest is a hash that is used to represent the data inside a file.
 
 ### 4.2 Reproducibility and verification
 
@@ -79,9 +79,9 @@ From a study point of view, digests are used to detect changes in files. This ca
 
 1. Changes in a file are trivially detected. Any change to the file (intentional or not) is easily discovered by comparing the digest on record against a newly computed digest against the file.
 2. Renamed files can be correctly matched against hashes. If a file is accidentally (or intentionally but forgotten) renamed, this can be detected by comparing the digest of an unknown file against all the digests of the old files.
-3. Digests for the files can be compared across filesystems and architectures. The hashing algorithms (e.g. BLAKE3 or SHA-256) are all based solely on the bytes of the file and has nothing to do with the way it is stored (e.g. metadata). Therefore, a file on a completely different system can be checked with the hash values against an original digest. 
+3. Digests for the files can be compared across filesystems and architectures. The hashing algorithms (e.g. BLAKE3 or SHA-256) are all based solely on the bytes of the file and has nothing to do with the way it is stored (e.g. metadata). Therefore, a file on a completely different system can be checked with the hash values against an original digest.
 
-If the digest is also cryptographically signed, that means that a 3rd party injects their own hash-like function to create another value -- the fingerprint. This is to prevent malicious tampering of the files -- without it, a malicious actor can change the files and then just re-do the hash and create a new digest. Once the digest is signed, it is "sealed" and tampering can be detected. This is common in evidence bundles -- once the evidence is created for regulatory or archival purposes, it can be sealed and any tampering with those files would be immediately evident. 
+If the digest is also cryptographically signed, that means that a 3rd party injects their own hash-like function to create another value -- the fingerprint. This is to prevent malicious tampering of the files -- without it, a malicious actor can change the files and then just re-do the hash and create a new digest. Once the digest is signed, it is "sealed" and tampering can be detected. This is common in evidence bundles -- once the evidence is created for regulatory or archival purposes, it can be sealed and any tampering with those files would be immediately evident.
 
 ## 5. Commands
 

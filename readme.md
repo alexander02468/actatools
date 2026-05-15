@@ -105,6 +105,7 @@ or more succinctly with using `stdin`
 ``` console
 $ ls *.txt | acta-records record --output record_2.json
 ```
+
 > Note this is a different Record than the last command because there are more files in this one.
 
 This can be verified using the `verify` command:
@@ -202,7 +203,7 @@ $ acta-study inspect config.toml
 
 Example Step information, showing dependencies, variables, and check results:
 
-``` console 
+``` console
 [Postprocess_stress]  PASS  
   Depends On: RunSolver
   Variables: 
@@ -250,21 +251,21 @@ The command `run` is used to execute a Step or a series of Steps continuously.
 
 Use Sub-Command `next-step` to run the next available Step.
 
-``` bash
-acta-study run next-step
+``` console
+$ acta-study run next-step
 ```
 
 A particular Step can be run with its Id
 
-``` bash
-acta-study run step <Step_Id>
+``` console
+$ acta-study run step <Step_Id>
 ```
 
 Steps can be run continuously according to a Variation or the entire Study
 
-``` bash
-acta-study run variation <Variation_Id>
-acta-study run study
+``` console
+$ acta-study run variation <Variation_Id>
+$ acta-study run study
 ```
 
 ## Issues

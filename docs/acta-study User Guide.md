@@ -68,7 +68,7 @@ Windows is released "as-is" and is built only via GitHub.
 
 At its core, the study is represented by a Directed Acyclic Graph (DAG), which describes how steps are dependent on one another and what needs to be run first.
 
-If a single program execution (let's call it Step B) depends on results from another program execution (le'ts call it Step A), then we need to make sure that Step A is ran before Step B, otherwise dependent files may not exist or be out of date. Furthermore, if Step A uses a variable value that depends on which "run" you are on, then Step B also needs to inherit this dependency as the output of Step A may be changing per variable value. This entire process can be more generally referred to as orchestration.
+If a single program execution (let's call it Step B) depends on results from another program execution (let's call it Step A), then we need to make sure that Step A is ran before Step B, otherwise dependent files may not exist or be out of date. Furthermore, if Step A uses a variable value that depends on which "run" you are on, then Step B also needs to inherit this dependency as the output of Step A may be changing per variable value. This entire process can be more generally referred to as orchestration.
 
 Some terminology is needed to define how Studies are created and managed. Specifically, we look at the following terms:
 
@@ -123,7 +123,7 @@ This is especially prevalent in standard One Factor at a Time study designs, whe
 
 Variations use their own internal hash-based ID which is indicated by a "V" prefix.
 
-```
+``` console
 Variations
 ----------
 V1b42bb03936edb68
@@ -140,7 +140,7 @@ That is the Variation Step. It represents a "realized" Step. A Step with all the
 
 The VarStep is given an individual Id and is identified with a "vs" prefix.
 
-```
+``` console
 
   VarStepId          Step Name      Run Status
 ----------------------------------------------------
@@ -151,7 +151,6 @@ The VarStep is given an individual Id and is identified with a "vs" prefix.
   vs789bff3b753fb971 RunSolver      Not-Initialized
 
 ```
-
 
 ### 4.5 Study
 
@@ -199,6 +198,14 @@ Templated strings are string values that use special templates to indicate run-t
 2. Variable references - values that are defined in the Design File
 3. Shared references - values or files that are shared across the Study
 
-#### 5.2.1 Step References
+#### 5.2.1 Step references
 
-Step references are defined by `{steps.<StepName>.outputs}` and refers to the <StepName> belonging to the Branch dependencies of that particular Step.
+Step references are defined by `{steps.<StepName>.outputs}` and refers to the `<StepName>` belonging to the Branch dependencies of that particular Step. Step names are automatically resolved in the VarStep Uid when running.
+
+#### 5.2.2 Variable references
+
+Variable references are defined by `{variables.<VariableName>}` and refers to the `<VariableName>` value that is being used by that particular step. This is automatically resolved as the value defined in the Design File in VarStep.
+
+#### 5.2.3 Shared references
+
+Shared references are defined by `{shared}` and refer to the `shared` directory of the study (default is `/shared`). This is mainly used to indicate when common files are shared across Steps -- which helps with tracking and evidence bundling. In general, every file used by a Step, that is not specific to a particular run (e.g. a Step reference) should be put in `shared` as that allows for ActaStudy to be aware of the file. This file can then be relocated into local evidence bundles, if desired. 

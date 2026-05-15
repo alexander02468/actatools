@@ -43,14 +43,14 @@ On Linux, the personal folder is commonly at `~/bin` or `~/.local/bin`.
 
 For ActaRecords:
 
-``` bash
-cp acta-records ~/bin
+``` console
+$ cp acta-records ~/bin
 ```
 
 You can check that ActaRecords is on your path by trying to see its version
 
-``` bash
-acta-records --version
+``` console
+$ acta-records --version
 ```
 
 ## 3. System Support
@@ -78,7 +78,7 @@ One of the main uses for hashes and digests is to verify that a file is indeed, 
 From a study point of view, digests are used to detect changes in files. This can be input, results, or even the scripts themselves. Once the file is hashed and the digest is recorded, any changes to those files are easily detected. Having a digest of a file allows for the following scenarios:
 
 1. Changes in a file are trivially detected. Any change to the file (intentional or not) is easily discovered by comparing the digest on record against a newly computed digest against the file.
-2. Renamed files can be correctly matched against hashes. So if a file is accidentally (or intentionally but forgotten) renamed, this can be detected by comparing the digest of an unknown file against all the digests of the old files.
+2. Renamed files can be correctly matched against hashes. If a file is accidentally (or intentionally but forgotten) renamed, this can be detected by comparing the digest of an unknown file against all the digests of the old files.
 3. Digests for the files can be compared across filesystems and architectures. The hashing algorithms (e.g. BLAKE3 or SHA-256) are all based solely on the bytes of the file and has nothing to do with the way it is stored (e.g. metadata). Therefore, a file on a completely different system can be checked with the hash values against an original digest. 
 
 If the digest is also cryptographically signed, that means that a 3rd party injects their own hash-like function to create another value -- the fingerprint. This is to prevent malicious tampering of the files -- without it, a malicious actor can change the files and then just re-do the hash and create a new digest. Once the digest is signed, it is "sealed" and tampering can be detected. This is common in evidence bundles -- once the evidence is created for regulatory or archival purposes, it can be sealed and any tampering with those files would be immediately evident. 
@@ -204,8 +204,7 @@ Record Entries
 
 Here, all the files are shown with their actual digest and recalculated digests.
 
-
-Multiple files and reading in via `stdin` is supported as well.
+Multiple files read in via `stdin` are supported as well.
 
 ```console
 $ acta-records verify record.json record1.json
@@ -219,7 +218,7 @@ record1.json                     VERIFIED 0ee13d328ff818...6069af8e44ffa3e
 record2.json                     VERIFIED 818cfbdd9f7273...31cb4667963b8b4
 ```
 
-Note that a `record_wrong.json` is intentionally included here with the final digest slightly changed. 
+Note that a `record_wrong.json` is intentionally included here with the final digest slightly changed.
 
 ### 5.4 `compare`
 
@@ -230,7 +229,7 @@ Entries are aligned using a tiered approach, attempting to align by:
 1. hash-value
 2. filename
 
-Entries that cannot be uniquely matched are grouped together as "undetermined" in the comparison report. 
+Entries that cannot be uniquely matched are grouped together as "undetermined" in the comparison report.
 
 ``` console
 $ acta-study compare record.json record1.json
@@ -306,7 +305,7 @@ Like the `record` command, files can be "piped" in, or an specified in an Includ
 
 From the `examples/acta-records/` folder, each are equivalent from a Bash terminal:
 
-``` bash
+``` console
 acta-records bundle example_file_1_copy.txt example_file1.txt example_file_2.txt --output-dir bundle_dir
 acta-records bundle --includes-file record.includes --output-dir bundle_dir
 ls *.txt | acta-records bundle --output-dir bundle_dir

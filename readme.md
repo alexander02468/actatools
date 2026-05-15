@@ -42,7 +42,7 @@ By design, ActaTools sits in a comfortable niche that no other tools currently o
 and more cumbersome -- difficult to integrate into entrenched workflows or they make you buy into their workflow. Or the other end is a bunch of small tools that you would need to script around.
 
 ActaTools is for the small research group that works mainly locally, and needs to have data and script provenance, or
-a small tool to organize their studies. It is not replacing big orchestration tools like Snakeflow or distributed
+a small tool to organize their studies. It is not replacing big orchestration tools like SnakeMake or distributed
 database management like DataLad.
 
 It is designed to be the step before reaching for those larger solutions.
@@ -58,8 +58,10 @@ ActaTools consists of two separate binaries that can be used independently of ea
 
 ## Status
 
-ActaTools is an *early-stage project*. As such, there will be features that have not been thoroughly implemented or
-tested.
+ActaTools is an *early-stage project*. As such, there will be features that have *not* been thoroughly implemented or
+tested. 
+
+In general, ActaRecords is much more mature than ActaStudy.
 
 ### ActaRecords
 
@@ -67,13 +69,13 @@ Primary effort is going towards ActaRecords, as that is tightly scoped and has i
 to add a provenance layer. The command-line interface allows evidence bundling ad-hoc with user scripts and can
 be directly integrated into existing workflows, or batched at the end.
 
-Status: Core features are implemented. Robustness and hardening is ongoing, and minor optional features are being added.
+Status: Stable. Core features are implemented. Robustness and hardening is ongoing, and minor optional features are being added.
 
 ### ActaStudy
 
 Minimal effort is currently going towards ActaStudy, as that is more ambitious use-case, but with possibly lower broad-appeal as it does require changes to workflows. As such, it cannot be easily inserted after a workflow has already been setup.
 
-Status: Core architecture and limited features are added. Robustness testing is lacking.
+Status: Unstable. Core architecture and limited features are added. Robustness testing is lacking. Expect architectural changes to happen in future.
 
 ## Installation
 
@@ -82,11 +84,11 @@ the binaries locally, then put them along your command line path, or call them d
 self-contained and portable.
 
 Release Builds are provided for Linux, MacOS, and Windows. However, only Linux and MacOS are actively tested while Windows builds
-are done through the Github CI and are provided "as-is".
+are done through the GitHub CI and are provided "as-is".
 
 ## Examples
 
-This section is a Quick-Start guide. Please see the associated [Acta-Records user guide](/docs/acta-records%20user%20guide.md) or Acta-Study User Guide for more detailed documentation.
+This section is a Quick-Start guide. Please see the associated [Acta-Records User Guide](/docs/acta-records%20user%20guide.md) or [Acta-Study User Guide](/docs/acta-study%20User%20Guide.md) for more detailed documentation.
 
 ### Record evidence and verify
 

@@ -127,54 +127,6 @@ If you've ran the `record` commands above, you can compare the two Records.
 ``` console
 $ acta-records compare record_1.json record_2.json
 Record comparison
-=================
-
-Inputs
-------
-
-Record 1: record1.json
-Record 2: record2.json
-
-Summary
--------
-
-  =  Same                   0
-  ~  Changed                0
-  !  Undetermined (1)       1
-  !  Undetermined (2)       1
-  -----------------------
-     Total              2
-
-Legend
-------
-
-  =  Same           record matched and digest is unchanged
-  ~  Changed        record matched but digest changed
-  !  Undetermined   matcher could not match record
-
-No Change
----------
-(None)
-
-Changed
--------
-(None)
-
-Undetermined Record 1
----------------------
-
-[0000] ! UNDETERMINED
-  key:        (FileName)  example_file_1.txt
-  Record:     example_file_1.txt
-  digest:     756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a 
-
-Undetermined Record 2
----------------------
-
-[0000] ! UNDETERMINED
-  key:        (FileName)  example_file_2.txt
-  Record:     example_file_2.txt
-  digest:     a07f50a89a8b7cc7348c89f64545e84b8741022d6b937870a850c79a8119a3cb 
 ```
 
 This attempts to match the files across the Records and then compares the hash values.

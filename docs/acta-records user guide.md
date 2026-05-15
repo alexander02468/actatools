@@ -169,58 +169,6 @@ If you want to see the longer audit-like verification, you can pass the --long o
 ``` console
 $ acta-records verify record.json --long
 Record Verification
-===================
-
-Summary
--------
-record.json
-
-               VERIFIED
-     Expected  9007586de5dc6d0067aa6642beba182d860305108c3011c27d8709abb69d62ad
-   --> Actual  9007586de5dc6d0067aa6642beba182d860305108c3011c27d8709abb69d62ad
-
-  Num Records Verified  3
-    Num Records Failed  0
-  -----------------------------
-                 Total  3
-
-Record Entries
---------------
-  File  example_file_1_copy.txt
-                   VERIFIED
-         Expected  756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a
-       --> Actual  756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a
-
-  File  example_file_1.txt
-                   VERIFIED
-         Expected  756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a
-       --> Actual  756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a
-
-  File  example_file_2.txt
-                   VERIFIED
-         Expected  a07f50a89a8b7cc7348c89f64545e84b8741022d6b937870a850c79a8119a3cb
-       --> Actual  a07f50a89a8b7cc7348c89f64545e84b8741022d6b937870a850c79a8119a3cb
-```
-
-Here, all the files are shown with their actual digest and recalculated digests.
-
-Multiple files read in via `stdin` are supported as well.
-
-```console
-$ acta-records verify record.json record1.json
-$ ls *.json | acta-records verify
-```
-
-``` console
-record_wrong.json                FAILED   90075...9d62ad -> 90075...9d62ad
-record.json                      VERIFIED 9007586de5dc6d...d8709abb69d62ad
-record1.json                     VERIFIED 0ee13d328ff818...6069af8e44ffa3e
-record2.json                     VERIFIED 818cfbdd9f7273...31cb4667963b8b4
-```
-
-Note that a `record_wrong.json` is intentionally included here with the final digest slightly changed.
-
-### 5.4 `compare`
 
 The command `compare` compares two Records, aligning files and checking their hash values against one another. File alignment is a potential issue as different records, likely being generated at different times, can have different paths -- making it difficult to match each entry to each other.
 
@@ -235,67 +183,6 @@ Entries that cannot be uniquely matched are grouped together as "undetermined" i
 $ acta-study compare record.json record1.json
 
 Record comparison
-=================
-
-Inputs
-------
-
-Record 1: record.json
-Record 2: record1.json
-
-Summary
--------
-
-  =  Same                   1
-  ~  Changed                0
-  !  Undetermined (1)       2
-  !  Undetermined (2)       0
-  -----------------------
-     Total              3
-
-Legend
-------
-
-  =  Same           record matched and digest is unchanged
-  ~  Changed        record matched but digest changed
-  !  Undetermined   matcher could not match record
-
-No Change
----------
-
-[0000] = SAME
-  key:        (FileName)  example_file_1.txt
-  Record 1:     example_file_1.txt
-  Record 2:     example_file_1.txt
-  digest:     756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a
-
-Changed
--------
-(None)
-
-Undetermined Record 1
----------------------
-
-[0000] ! UNDETERMINED
-  key:        (FileName)  example_file_1_copy.txt
-  Record:     example_file_1_copy.txt
-  digest:     756b2e6e302e051ac26eb904f3e3216c61b83933f5b2c9e349e525aef440ea0a 
-[0001] ! UNDETERMINED
-  key:        (FileName)  example_file_2.txt
-  Record:     example_file_2.txt
-  digest:     a07f50a89a8b7cc7348c89f64545e84b8741022d6b937870a850c79a8119a3cb 
-
-Undetermined Record 2
----------------------
-(None)
-
-```
-
-Here, `record.json` had three files and `record1.json` had only one of those files. Thus, we see that one file is matched -- by filename. The hash values could not work because two values in `record.json` had the same digest.
-
-The other two files in `record.json` (input 1) are unable to be matched against `record1.json` (input 2) and are printed at the end. It also prints the last attempt to match and what key it was using -- here it is trying to match based on filename.
-
-### 5.5 `bundle`
 
 The command `bundle` bundles a set of a file together into a directory. It is intended as an easy way to create an evidence or archival bundle of files.
 

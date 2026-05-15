@@ -133,6 +133,32 @@ impl ParsedString {
         let parsed_output = Self { parts };
         Ok(parsed_output)
     }
+
+    /// This function takes in a ParsedString to create the TemplatedString, adding Step context if needed
+    /// It may be worthwhile to separate out the Step context later so that it is only supplied if needed, but the cost
+    /// is relatively cheap to provide, just a little less clean from a code design POV
+    pub fn into_templated_string_with_context(self, step_name: &str) -> TemplatedString {
+        let mut parts: Vec<TemplatedStringPart> = Vec::with_capacity(self.parts.len());
+        for parsed_part in self.parts {
+            let template_part = match parsed_part {
+                ParsedPart::Literal(s) => TemplatedStringPart::Literal(s.clone()),
+                ParsedPart::LocalStep(step_loc) => TemplatedStringPart::Step {
+                    name: String::from(step_name),
+                    loc: step_loc.clone(),
+                },
+                ParsedPart::Step { name, loc } => TemplatedStringPart::Step {
+                    name: String::from(name),
+                    loc: loc.clone(),
+                },
+                ParsedPart::StudyVariable(v) => TemplatedStringPart::StudyVariable(String::from(v)),
+                ParsedPart::StudyShared => TemplatedStringPart::StudyShared,
+            };
+
+            parts.push(template_part)
+        }
+
+        TemplatedString { parts }
+    }
 }
 
 /// All the possible parts that can be in the { }, already with full context
@@ -174,35 +200,6 @@ pub struct TemplatedString {
 }
 
 impl TemplatedString {
-    /// This function takes in a ParsedString to create the TemplatedString, adding Step context if needed
-    /// It may be worthwhile to separate out the Step context later so that it is only supplied if needed, but the cost
-    /// is relatively cheap to provide, just a little less clean from a code design POV
-    pub fn from_parsed_string_with_context(
-        parsed_string: &ParsedString,
-        step_name: &str,
-    ) -> Result<Self, Error> {
-        let mut parts: Vec<TemplatedStringPart> = Vec::new();
-        for parsed_part in &parsed_string.parts {
-            let template_part = match parsed_part {
-                ParsedPart::Literal(s) => TemplatedStringPart::Literal(s.clone()),
-                ParsedPart::LocalStep(step_loc) => TemplatedStringPart::Step {
-                    name: String::from(step_name),
-                    loc: step_loc.clone(),
-                },
-                ParsedPart::Step { name, loc } => TemplatedStringPart::Step {
-                    name: String::from(name),
-                    loc: loc.clone(),
-                },
-                ParsedPart::StudyVariable(v) => TemplatedStringPart::StudyVariable(String::from(v)),
-                ParsedPart::StudyShared => TemplatedStringPart::StudyShared,
-            };
-
-            parts.push(template_part)
-        }
-
-        Ok(Self { parts })
-    }
-
     /// creates a string using the context_map to map templated parts to realizations
     pub fn realize_to_string(
         &self,

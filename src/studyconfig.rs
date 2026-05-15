@@ -357,10 +357,9 @@ impl ConfigStep {
     fn from_toml_table(key_name: &str, table: &Table) -> Result<ConfigStep, Error> {
         // parse
         let uid = String::from(key_name);
-        let run_exe_path = TemplatedString::from_parsed_string_with_context(
-            &ParsedString::from_string(&extract_string_from_table(table, "run_exe")?)?,
-            &uid,
-        )?;
+        let run_exe_path =
+            ParsedString::from_string(&extract_string_from_table(table, "run_exe")?)?
+                .into_templated_string_with_context(&uid);
 
         /// This function converts and checks an optional TOML entry that should be Vec<String>,
         /// If there is a parsing error, returns Error. Otherwise returns Option<Vec<String>>, which
@@ -397,9 +396,9 @@ impl ConfigStep {
         let run_args_no_context: Option<Vec<ParsedString>> = extract_vector_str(table, "run_args")?;
         let run_args = run_args_no_context
             .unwrap_or_default()
-            .iter()
-            .map(|x| TemplatedString::from_parsed_string_with_context(x, &uid))
-            .collect::<Result<Vec<TemplatedString>, Error>>()?;
+            .into_iter()
+            .map(|x| x.into_templated_string_with_context(&uid))
+            .collect::<Vec<TemplatedString>>();
 
         // use the run_args to extract any dependencies and variable dependecies
         let mut depends_on: Vec<String> = Vec::new();

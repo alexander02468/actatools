@@ -42,7 +42,7 @@ By design, ActaTools sits in a comfortable niche that no other tools currently o
 and more cumbersome -- difficult to integrate into entrenched workflows or they make you buy into their workflow. Or the other end is a bunch of small tools that you would need to script around.
 
 ActaTools is for the small research group that works mainly locally, and needs to have data and script provenance, or
-a small tool to organize their studies. It is not replacing big orchestration tools like Snakeflow or distributed
+a small tool to organize their studies. It is not replacing big orchestration tools like SnakeMake or distributed
 database management like DataLad.
 
 It is designed to be the step before reaching for those larger solutions.
@@ -58,8 +58,10 @@ ActaTools consists of two separate binaries that can be used independently of ea
 
 ## Status
 
-ActaTools is an *early-stage project*. As such, there will be features that have not been thoroughly implemented or
-tested.
+ActaTools is an *early-stage project*. As such, there will be features that have *not* been thoroughly implemented or
+tested. 
+
+In general, ActaRecords is much more mature than ActaStudy.
 
 ### ActaRecords
 
@@ -67,13 +69,13 @@ Primary effort is going towards ActaRecords, as that is tightly scoped and has i
 to add a provenance layer. The command-line interface allows evidence bundling ad-hoc with user scripts and can
 be directly integrated into existing workflows, or batched at the end.
 
-Status: Core features are implemented. Robustness and hardening is ongoing, and minor optional features are being added.
+Status: Stable. Core features are implemented. Robustness and hardening is ongoing, and minor optional features are being added.
 
 ### ActaStudy
 
 Minimal effort is currently going towards ActaStudy, as that is more ambitious use-case, but with possibly lower broad-appeal as it does require changes to workflows. As such, it cannot be easily inserted after a workflow has already been setup.
 
-Status: Core architecture and limited features are added. Robustness testing is lacking.
+Status: Unstable. Core architecture and limited features are added. Robustness testing is lacking. Expect architectural changes to happen in future.
 
 ## Installation
 
@@ -82,11 +84,11 @@ the binaries locally, then put them along your command line path, or call them d
 self-contained and portable.
 
 Release Builds are provided for Linux, MacOS, and Windows. However, only Linux and MacOS are actively tested while Windows builds
-are done through the Github CI and are provided "as-is".
+are done through the GitHub CI and are provided "as-is".
 
 ## Examples
 
-This section is a Quick-Start guide. Please see the associated [Acta-Records user guide](/docs/acta-records%20user%20guide.md) or Acta-Study User Guide for more detailed documentation.
+This section is a Quick-Start guide. Please see the associated [Acta-Records User Guide](/docs/acta-records%20user%20guide.md) or [Acta-Study User Guide](/docs/acta-study%20User%20Guide.md) for more detailed documentation.
 
 ### Record evidence and verify
 
@@ -94,21 +96,24 @@ Files can be hashed and recorded into a Record, which is a JSON file that stores
 
 From the `/examples/acta-records` directory: 
 
-``` bash
-acta-records record example_file_1.txt example_file_2.txt --output record_1.json
+``` console
+$ acta-records record example_file_1.txt example_file_2.txt --output record_1.json
 ```
 
 or more succinctly with using `stdin`
 
-``` bash
-ls *.txt | acta-records record --output record_2.json
+``` console
+$ ls *.txt | acta-records record --output record_2.json
 ```
+
 > Note this is a different Record than the last command because there are more files in this one.
 
 This can be verified using the `verify` command:
 
-```bash
-acta-records verify record_1.json record_2.json
+```console
+$ acta-records verify record_1.json record_2.json
+record1.json                     VERIFIED 0ee13d328ff818...6069af8e44ffa3e
+record2.json                     VERIFIED 818cfbdd9f7273...31cb4667963b8b4
 ```
 
 which will print a verification summary for each input Record.
@@ -119,8 +124,9 @@ You can compare two Records in detail using the `compare` command. Note that onl
 
 If you've ran the `record` commands above, you can compare the two Records.
 
-``` bash
-acta-records compare record_1.json record_2.json
+``` console
+$ acta-records compare record_1.json record_2.json
+Record comparison
 ```
 
 This attempts to match the files across the Records and then compares the hash values.
@@ -143,13 +149,13 @@ to a Variation.
 The command `inspect` inspects a Configuration File, displaying detected files, detected dependencies, and constructs
 a directed acyclic graph for inspection.
 
-``` bash
-acta-study inspect config.toml
+``` console
+$ acta-study inspect config.toml
 ```
 
 Example Step information, showing dependencies, variables, and check results:
 
-``` bash 
+``` console
 [Postprocess_stress]  PASS  
   Depends On: RunSolver
   Variables: 
@@ -157,7 +163,7 @@ Example Step information, showing dependencies, variables, and check results:
 
 Example directed acyclic graph showing dependency structures between defined Steps:
 
-``` bash
+``` console
 Directed Acyclic Graph
 ----------------------
       [Preprocess]
@@ -174,7 +180,8 @@ or a Step `status Step <Step Id>`.
 
 The sub-command `status study` is useful to see an overview of Variations and Steps along with their Ids and run status.
 
-``` bash
+``` console
+$ acta-study status study
 Variations
 ----------
 V1b42bb03936edb68
@@ -196,21 +203,21 @@ The command `run` is used to execute a Step or a series of Steps continuously.
 
 Use Sub-Command `next-step` to run the next available Step.
 
-``` bash
-acta-study run next-step
+``` console
+$ acta-study run next-step
 ```
 
 A particular Step can be run with its Id
 
-``` bash
-acta-study run step <Step_Id>
+``` console
+$ acta-study run step <Step_Id>
 ```
 
 Steps can be run continuously according to a Variation or the entire Study
 
-``` bash
-acta-study run variation <Variation_Id>
-acta-study run study
+``` console
+$ acta-study run variation <Variation_Id>
+$ acta-study run study
 ```
 
 ## Issues

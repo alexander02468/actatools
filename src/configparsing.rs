@@ -31,8 +31,8 @@ pub enum StringParseError {
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum ParsedPart {
     Literal(String),
-    LocalStep(StepLoc), // still needs Step context
-    Step { name: String, loc: StepLoc },
+    LocalStep, // still needs Step context
+    Step(String),
     StudyVariable(String),
     StudyShared,
 }
@@ -43,33 +43,17 @@ impl ParsedPart {
     pub fn from_string_part(string_part: &str) -> Result<Self, StringParseError> {
         match string_part.split(".").collect::<Vec<_>>().as_slice() {
             [s1] => match s1 {
-                &"inputs" => Ok(Self::LocalStep(StepLoc::Inputs)),
-                &"outputs" => Ok(Self::LocalStep(StepLoc::Outputs)),
                 &"shared" => Ok(Self::StudyShared),
-                _ => Err(StringParseError::IncorrectFormat(s1.to_string())),
-            },
+                s => Err(StringParseError::IncorrectFormat(s.to_string()))
+            }
 
             [s1, s2] => match (s1, s2) {
                 (&"variables", s2) => Ok(Self::StudyVariable(String::from(*s2))),
+                (&"steps", &"self") => Ok(Self::LocalStep),
+                (&"steps", s2) => Ok(Self::Step(s2.to_string())),
                 _ => Err(StringParseError::IncorrectFormat2(
                     s1.to_string(),
                     s2.to_string(),
-                )),
-            },
-
-            [s1, s2, s3] => match (s1, s2, s3) {
-                (&"steps", s2, &"inputs") => Ok(Self::Step {
-                    name: String::from(*s2),
-                    loc: StepLoc::Inputs,
-                }),
-                (&"steps", s2, &"outputs") => Ok(Self::Step {
-                    name: String::from(*s2),
-                    loc: StepLoc::Outputs,
-                }),
-                _ => Err(StringParseError::IncorrectFormat3(
-                    s1.to_string(),
-                    s2.to_string(),
-                    s3.to_string(),
                 )),
             },
 
@@ -159,21 +143,13 @@ impl ParsedString {
     }
 
     /// This function takes in a ParsedString to create the TemplatedString, adding Step context if needed
-    /// It may be worthwhile to separate out the Step context later so that it is only supplied if needed, but the cost
-    /// is relatively cheap to provide, just a little less clean from a code design POV
     pub fn into_templated_string_with_context(self, step_name: &str) -> TemplatedString {
         let mut parts: Vec<TemplatedStringPart> = Vec::with_capacity(self.parts.len());
         for parsed_part in self.parts {
             let template_part = match parsed_part {
                 ParsedPart::Literal(s) => TemplatedStringPart::Literal(s.clone()),
-                ParsedPart::LocalStep(step_loc) => TemplatedStringPart::Step {
-                    name: String::from(step_name),
-                    loc: step_loc.clone(),
-                },
-                ParsedPart::Step { name, loc } => TemplatedStringPart::Step {
-                    name: String::from(name),
-                    loc: loc.clone(),
-                },
+                ParsedPart::LocalStep => TemplatedStringPart::Step(String::from(step_name)),
+                ParsedPart::Step(name) => TemplatedStringPart::Step(String::from(name)),
                 ParsedPart::StudyVariable(v) => TemplatedStringPart::StudyVariable(String::from(v)),
                 ParsedPart::StudyShared => TemplatedStringPart::StudyShared,
             };
@@ -189,7 +165,7 @@ impl ParsedString {
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum TemplatedStringPart {
     Literal(String),
-    Step { name: String, loc: StepLoc },
+    Step(String),
     StudyShared,
     StudyVariable(String),
 }
@@ -198,24 +174,11 @@ impl std::fmt::Display for TemplatedStringPart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             TemplatedStringPart::Literal(s) => write!(f, "{s}"),
-            TemplatedStringPart::Step {
-                name,
-                loc: StepLoc::Inputs,
-            } => write!(f, "<steps.{name}.inputs>"),
-            TemplatedStringPart::Step {
-                name,
-                loc: StepLoc::Outputs,
-            } => write!(f, "<steps.{name}.outputs>"),
+            TemplatedStringPart::Step(name) => write!(f, "<steps.{name}.files>"),
             TemplatedStringPart::StudyShared => write!(f, "<shared>"),
             TemplatedStringPart::StudyVariable(s) => write!(f, "<variable.{s}>"),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
-pub enum StepLoc {
-    Inputs,
-    Outputs,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -282,45 +245,9 @@ mod tests_parsed_string {
     }
 
     #[test]
-    fn local_step_inputs() {
-        let result = ParsedString::from_string("{inputs}").unwrap();
-        assert_eq!(result.parts, [ParsedPart::LocalStep(StepLoc::Inputs)])
-    }
-
-    #[test]
-    fn local_step_outputs() {
-        let result = ParsedString::from_string("{outputs}").unwrap();
-        assert_eq!(result.parts, [ParsedPart::LocalStep(StepLoc::Outputs)])
-    }
-
-    #[test]
     fn variable_foo() {
         let result = ParsedString::from_string("{variables.foo}").unwrap();
         assert_eq!(result.parts, [ParsedPart::StudyVariable("foo".to_string())])
-    }
-
-    #[test]
-    fn step_foo_inputs() {
-        let result = ParsedString::from_string("{steps.foo.inputs}").unwrap();
-        assert_eq!(
-            result.parts,
-            [ParsedPart::Step {
-                name: "foo".to_string(),
-                loc: StepLoc::Inputs
-            }]
-        )
-    }
-
-    #[test]
-    fn step_foo_outputs() {
-        let result = ParsedString::from_string("{steps.foo.outputs}").unwrap();
-        assert_eq!(
-            result.parts,
-            [ParsedPart::Step {
-                name: "foo".to_string(),
-                loc: StepLoc::Outputs
-            }]
-        )
     }
 
     #[test]

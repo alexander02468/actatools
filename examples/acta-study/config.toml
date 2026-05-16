@@ -36,26 +36,28 @@ shared = ["scripts/run_preprocess.sh",
 #   Step dependencies are then calculated by inspecting for step outputs in other steps
 
 ## Step 1: Preprocess
-[steps]
-[steps.Preprocess]
+[[steps]]
+    name = "preprocess"
     run_exe = "/bin/bash"
     run_args = ["{shared}/scripts/preprocess.sh",    # {outputs} without {steps} indicates *this* step
                 "{variables.sleep_time}",            # {variables.<var_name>} puts in the exact value in the Design File
-                "{outputs}/subject.mesh"]
+                "{steps.self}/subject.mesh"]
 
 ## Step 2: Solver
-[steps.RunSolver]
+[[steps]]
+    name = "RunSolver"
     run_exe = "/bin/bash"
     run_args = ["{shared}/scripts/solve.sh",
-                "{steps.Preprocess.outputs}/subject.mesh",  # Dependency is auto-detected through the {steps.} template
+                "{steps.Preprocess}/subject.mesh",  # Dependency is auto-detected through the {steps.} template
                 "{shared}/solver_settings.json",
-                "{outputs}/results.json"]                   
+                "{steps.self}/results.json"]                   
 
 ## Step 3: Postprocess
-[steps.Postprocess_stress]
+[[steps]]
+    name = "postprocess"
     run_exe = "/bin/bash"
     run_args  = ["{shared}/scripts/postprocess.sh",
                 "{steps.RunSolver.outputs}/output_RunSolver.json",
-                "{outputs}/report.md"] 
+                "{steps.self}/report.md"] 
 
 

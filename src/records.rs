@@ -16,10 +16,10 @@ use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::uid::{UidDigest, hash_digests_stable};
+use crate::digest::{UidDigest, hash_digests_stable};
 use crate::{
+    digest::hash_file,
     paths::{Directory, FilePath, PathError},
-    uid::hash_file,
 };
 
 const RECORD_ENTRY_LEN: usize = 32;

@@ -1,10 +1,11 @@
 pub mod configparsing;
 pub mod conversion;
-pub mod execution;
+// pub mod execution;
 pub mod paths;
 pub mod recordcomparison;
 pub mod records;
-pub mod status;
-pub mod studyconfig;
-pub mod studycontrol;
-pub mod uid;
+// pub mod status;
+pub mod study;
+// pub mod studyconfig;
+// pub mod studycontrol;
+pub mod digest;

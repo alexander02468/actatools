@@ -756,8 +756,8 @@ mod test_match_engine {
     use std::path::PathBuf;
 
     use crate::{
+        digest::UidDigest,
         paths::{Directory, FilePath},
-        uid::UidDigest,
     };
 
     use super::*;

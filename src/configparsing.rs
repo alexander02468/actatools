@@ -2,8 +2,31 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::collections::HashMap;
+use thiserror;
 
-use anyhow::{Error, anyhow, bail};
+#[derive(Debug, thiserror::Error)]
+pub enum StringParseError {
+    #[error("Incorrect format")]
+    IncorrectFormatGeneral,
+
+    #[error("Incorrect format with `{0}`")]
+    IncorrectFormat(String),
+
+    #[error("Incorrect format with `{0}`, and `{1}`")]
+    IncorrectFormat2(String, String),
+
+    #[error("Incorrect format with `{0}`, `{1}`, and `{2}`")]
+    IncorrectFormat3(String, String, String),
+
+    #[error("brackets closed without being opened")]
+    TemplatedStringClosedWithoutOpen,
+
+    #[error("brackets were opened and never closed")]
+    TemplatedStringLeftOpen,
+
+    #[error("brackets were opened while already opened")]
+    TemplatedStringOpenTwice,
+}
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum ParsedPart {
@@ -17,21 +40,20 @@ pub enum ParsedPart {
 impl ParsedPart {
     /// Creates a ParsedPart from a separated string part based on set key terms. These are not resolved or
     /// interpreted at all -- that is left to the TemplatedStringPart
-    pub fn from_string_part(string_part: &str) -> Result<Self, Error> {
+    pub fn from_string_part(string_part: &str) -> Result<Self, StringParseError> {
         match string_part.split(".").collect::<Vec<_>>().as_slice() {
             [s1] => match s1 {
                 &"inputs" => Ok(Self::LocalStep(StepLoc::Inputs)),
                 &"outputs" => Ok(Self::LocalStep(StepLoc::Outputs)),
                 &"shared" => Ok(Self::StudyShared),
-                _ => Err(anyhow!(
-                    "One Item Error: Incorrectly formatted template, {s1}"
-                )),
+                _ => Err(StringParseError::IncorrectFormat(s1.to_string())),
             },
 
             [s1, s2] => match (s1, s2) {
                 (&"variables", s2) => Ok(Self::StudyVariable(String::from(*s2))),
-                _ => Err(anyhow!(
-                    "Two Item Error: Incorrectly formatted template, {s1}, {s2}"
+                _ => Err(StringParseError::IncorrectFormat2(
+                    s1.to_string(),
+                    s2.to_string(),
                 )),
             },
 
@@ -44,12 +66,14 @@ impl ParsedPart {
                     name: String::from(*s2),
                     loc: StepLoc::Outputs,
                 }),
-                _ => Err(anyhow!(
-                    "Three Item Error: Incorrectly formatted template, {s1}, {s2}, {s3}"
+                _ => Err(StringParseError::IncorrectFormat3(
+                    s1.to_string(),
+                    s2.to_string(),
+                    s3.to_string(),
                 )),
             },
 
-            _ => Err(anyhow!("Default: Incorrectly formatted template")),
+            _ => Err(StringParseError::IncorrectFormatGeneral),
         }
     }
 }
@@ -63,7 +87,7 @@ pub struct ParsedString {
 impl ParsedString {
     /// Creates a ParsedString from a string. This converts any {...} into a ParsedStringPart and any sections
     /// between as a ParsedStrinPart::Literal
-    pub fn from_string(text: &str) -> Result<Self, Error> {
+    pub fn from_string(text: &str) -> Result<Self, StringParseError> {
         // loop through the string, when a "{" is found, wait for the next "}" and then extract its contents into a part
         // If the end is never reached, return an error.
         let mut parts: Vec<ParsedPart> = Vec::new();
@@ -74,14 +98,14 @@ impl ParsedString {
         for (i, c) in text.char_indices() {
             match c {
                 '}' => {
-                    // catch the case it was no opened
+                    // catch the case it was not opened
                     if opened == false {
-                        bail!("}} found but no {{ before it")
+                        Err(StringParseError::TemplatedStringClosedWithoutOpen)?
                     }
 
                     // flush everything between the brackets, tag as Variable part
-                    let open_idx_clean =
-                        open_idx.ok_or_else(|| anyhow!("}} found before opening {{"))?;
+                    let open_idx_clean = open_idx
+                        .ok_or_else(|| StringParseError::TemplatedStringClosedWithoutOpen)?;
                     let part_string = String::from(&text[open_idx_clean + 1..i]);
 
                     parts.push(ParsedPart::from_string_part(&part_string)?);
@@ -99,7 +123,7 @@ impl ParsedString {
                 '{' => {
                     // catch the case that it was already opened
                     if opened {
-                        bail!("Ill formed templated string, {{ is opened before being closed")
+                        Err(StringParseError::TemplatedStringOpenTwice)?
                     }
 
                     // flush everything before if this isn't the very start, tag as string literal
@@ -117,7 +141,7 @@ impl ParsedString {
 
         // catch the case it was left open
         if opened {
-            bail!("{{ was found, but not closed")
+            Err(StringParseError::TemplatedStringLeftOpen)?
         }
 
         // catch the case it doesn't end on a }
@@ -194,6 +218,12 @@ pub enum StepLoc {
     Outputs,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum TemplatedStringError {
+    #[error("Key `{0}` not found in context map")]
+    MissingContextKey(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemplatedString {
     pub parts: Vec<TemplatedStringPart>,
@@ -204,7 +234,7 @@ impl TemplatedString {
     pub fn realize_to_string(
         &self,
         context_map: &HashMap<TemplatedStringPart, String>,
-    ) -> Result<String, Error> {
+    ) -> Result<String, TemplatedStringError> {
         let mut out_str = String::new();
 
         for p in &self.parts {
@@ -213,8 +243,8 @@ impl TemplatedString {
 
                 other => context_map
                     .get(p)
-                    .map(|x| x.as_str())
-                    .ok_or(anyhow!("unable to find {other} in context map"))?,
+                    .ok_or_else(|| TemplatedStringError::MissingContextKey(other.to_string()))?
+                    .as_str(),
             };
 
             out_str.push_str(str_to_add);

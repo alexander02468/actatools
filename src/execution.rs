@@ -17,7 +17,7 @@ use anyhow::{Context, Error, anyhow, bail};
 
 use crate::{
     // manifest::{ManifestSpec, RecordSpec, RecordType},
-    configparsing::{StepLoc, TemplatedStringPart},
+    configparsing::{StepLoc, TemplatedStringError, TemplatedStringPart},
     paths::{self, Directory, FilePath},
     records::{RecordIncludes, render_record},
     studyconfig::StudyConfiguration,
@@ -194,7 +194,7 @@ impl RunController {
                         .run_args
                         .iter()
                         .map(|x| x.realize_to_string(&context_map))
-                        .collect::<Result<Vec<String>, Error>>()?;
+                        .collect::<Result<Vec<String>, TemplatedStringError>>()?;
 
                     // collect the actual branches
                     let branches = varstep

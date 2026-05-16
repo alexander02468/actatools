@@ -85,7 +85,9 @@ pub enum FilePath {
 impl FilePath {
     /// Creates a new FilePath
     /// Uses the base_dir to complete, if provided
-    pub fn new(path: &Path, base_dir: Option<Directory>) -> Result<Self, PathError> {
+    pub fn new(path: impl Into<PathBuf>, base_dir: Option<Directory>) -> Result<Self, PathError> {
+        let path = path.into();
+
         // do not allow for empty paths without a base_dir
         let _result = match (path.as_os_str().is_empty(), &base_dir) {
             (true, None) => Err(PathError::NewFilePathInvalidArguments),

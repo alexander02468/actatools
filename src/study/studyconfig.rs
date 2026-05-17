@@ -11,6 +11,7 @@ use crate::{
 #[derive(Debug)]
 pub struct StudyConfiguration {
     pub settings: StudySettings,
+    pub shared: Vec<TemplatedString>,
     pub steps: Vec<ConfigStep>,
 }
 

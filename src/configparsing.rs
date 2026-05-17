@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use thiserror;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum StringParseError {
     #[error("Incorrect format")]
     IncorrectFormatGeneral,
@@ -44,8 +44,8 @@ impl ParsedPart {
         match string_part.split(".").collect::<Vec<_>>().as_slice() {
             [s1] => match s1 {
                 &"shared" => Ok(Self::StudyShared),
-                s => Err(StringParseError::IncorrectFormat(s.to_string()))
-            }
+                s => Err(StringParseError::IncorrectFormat(s.to_string())),
+            },
 
             [s1, s2] => match (s1, s2) {
                 (&"variables", s2) => Ok(Self::StudyVariable(String::from(*s2))),

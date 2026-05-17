@@ -30,24 +30,25 @@ pub enum ConfigFileError {
     #[error(transparent)]
     StringParseError(#[from] StringParseError),
 
-    #[error(transparent)]
+    #[error("failed to deserialize with TOML")]
     TomlDeserializationError(#[from] toml::de::Error),
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct RawStudyConfig {
-    name: String,
-    design_path: PathBuf,
+    study_name: String,
+    design_file: PathBuf,
     run_dir: Option<PathBuf>,
     shared_dir: Option<PathBuf>,
     evidence_dir: Option<PathBuf>,
+    shared: Option<Vec<String>>,
     steps: Vec<RawConfigStep>,
 }
 
 impl RawStudyConfig {
     fn into_study_config(self) -> Result<StudyConfiguration, ConfigFileError> {
         // normalize and check each filepath
-        let design_path = FilePath::new(self.design_path, None)?;
+        let design_path = FilePath::new(self.design_file, None)?;
 
         let run_dir = match self.run_dir {
             Some(run_dir_inner) => Directory::new(run_dir_inner)?,
@@ -71,15 +72,31 @@ impl RawStudyConfig {
             .map(|x| x.into_config_step())
             .collect::<Result<Vec<ConfigStep>, ConfigFileError>>()?;
 
+        let parsed_shared: Vec<ParsedString> = self
+            .shared
+            .unwrap_or_default()
+            .into_iter()
+            .map(|x| ParsedString::from_string(&x))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let shared = parsed_shared
+            .into_iter()
+            .map(|x| x.into_templated_string_with_context(""))
+            .collect();
+
         let settings = StudySettings {
-            name: self.name,
+            name: self.study_name,
             design_path,
             run_dir,
             shared_dir,
             evidence_dir,
         };
 
-        Ok(StudyConfiguration { settings, steps })
+        Ok(StudyConfiguration {
+            settings,
+            shared,
+            steps,
+        })
     }
 }
 
@@ -118,7 +135,6 @@ impl RawConfigStep {
 }
 
 pub struct ConfigReader;
-
 impl ConfigReader {
     pub fn build_from_reader<R: Read>(
         reader: &mut R,
@@ -137,5 +153,116 @@ impl ConfigReader {
 #[cfg(test)]
 mod test {
 
+    fn good_root_toml() -> &'static str {
+        r#"
+    study_name = "Example"
+    design_file = "./design.csv"
+    run_dir = "./runs"
+    evidence_dir = "./evidence"
+    shared_dir = "./shared"
+    shared = [
+    "scripts/run_preprocess.sh",
+    "solver_settings.json",
+    "scripts/postprocess.sh",
+]
+"#
+    }
+
+    fn good_step_toml() -> &'static str {
+        r#"[[steps]]
+    name = "preprocess"
+    run_exe = "/bin/bash"
+    run_args = ["{shared}/scripts/preprocess.sh",
+                "{variables.sleep_time}",        
+                "{steps.self}/subject.mesh"]
+        
+        "#
+    }
+
     use super::*;
+
+    #[test]
+    fn test_into_study_config() {
+        let full_toml = [good_root_toml(), good_step_toml()].concat();
+        let study_config = ConfigReader::build_study_config(&full_toml).unwrap();
+        assert_eq!(study_config.settings.name, "Example");
+        assert_eq!(
+            study_config.settings.design_path,
+            FilePath::new("./design.csv", None).unwrap()
+        );
+        assert_eq!(
+            study_config.settings.shared_dir,
+            Directory::new("./shared").unwrap()
+        );
+        assert_eq!(
+            study_config.settings.evidence_dir,
+            Directory::new("./evidence").unwrap()
+        );
+        assert_eq!(
+            study_config.settings.run_dir,
+            Directory::new("./runs").unwrap()
+        );
+
+        assert_eq!(study_config.steps.len(), 1);
+        assert_eq!(study_config.steps[0].name, "preprocess");
+    }
+
+    #[test]
+    fn test_into_config_step() {
+        let raw_config_step = RawConfigStep {
+            name: "test".to_string(),
+            run_exe: "test.exe".to_string(),
+            run_args: Some(vec![
+                "test.csv".to_string(),
+                "{steps.self}/test.csv".to_string(),
+            ]),
+        };
+
+        let config_step = raw_config_step.into_config_step().unwrap();
+
+        // some basic accounting
+        assert_eq!(config_step.name, "test".to_string());
+        assert_eq!(config_step.run_args.len(), 2);
+    }
+
+    #[test]
+    fn test_defaults() {
+        let toml_front_str = r#"
+    study_name = "Example"
+    design_file = "./design.csv" 
+"#;
+        let toml_str = [toml_front_str, good_step_toml()].concat();
+        let study_config = ConfigReader::build_study_config(&toml_str).unwrap();
+
+        assert_eq!(
+            study_config.settings.evidence_dir,
+            Directory::new(DEFAULT_EVIDENCE_DIR).unwrap()
+        );
+        assert_eq!(
+            study_config.settings.run_dir,
+            Directory::new(DEFAULT_RUN_DIR).unwrap()
+        );
+        assert_eq!(
+            study_config.settings.shared_dir,
+            Directory::new(DEFAULT_SHARED_DIR).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_missing_required_study_name() {
+        let study_config_res = ConfigReader::build_study_config("");
+        assert!(study_config_res.is_err());
+    }
+
+    #[test]
+    fn test_incorrect_field_type() {
+        let toml_front_str = r#"
+    study_name = 5
+    design_file = "./design.csv" 
+"#;
+
+        let toml_str = [toml_front_str, good_step_toml()].concat();
+        let study_config_res = ConfigReader::build_study_config(&toml_str);
+        assert!(study_config_res.is_err())
+    }
 }

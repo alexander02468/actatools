@@ -52,7 +52,8 @@ impl Directory {
             return Ok(Directory::here());
         }
 
-        if !path.is_dir() {
+        // only check the directory if the path exists
+        if path.exists() && !path.is_dir() {
             return Err(PathError::NotADirectory(path));
         }
 
@@ -326,12 +327,5 @@ mod test_file_path {
         let path = Directory::here().as_path().to_path_buf();
         let base = Directory::new(path); // override the directory check 
         assert!(base.is_ok());
-    }
-
-    #[cfg(not(windows))] // absolute paths are Unix and will fail on windows
-    #[test]
-    fn test_construct_invalid_directory() {
-        let base = Directory::new(PathBuf::from("/foo")); // override the directory check
-        assert!(base.is_err());
     }
 }

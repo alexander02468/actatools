@@ -7,7 +7,6 @@ use std::{
 };
 
 use anyhow::Error;
-use polars::prelude::Scalar;
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{self, Visitor},
@@ -29,7 +28,7 @@ impl<const N: usize> UidDigest<N> {
     /// # Examples
     ///
     /// ```
-    /// # use actatools::uid::UidDigest;
+    /// # use actatools::digest::UidDigest;
     /// let digest = UidDigest::<8> {
     ///     id: [0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90],
     /// };
@@ -75,15 +74,6 @@ impl<const N: usize> UidDigest<N> {
         Ok(Self { id: out })
     }
 
-    pub fn from_str_value(string: &str, val: &Scalar) -> Result<Self, Error> {
-        let mut buf: Vec<u8> = Vec::new();
-        buf.extend_from_slice(string.as_bytes());
-        buf.extend(val.as_any_value().to_string().as_bytes());
-        let digest = blake3::hash(&buf); // 32 bytes
-        let out: [u8; N] = digest.as_bytes()[..N].try_into()?;
-
-        Ok(Self { id: out })
-    }
 }
 
 //     /// Creates a Uid12 from a Hashmap, usually inputs, linking inputs to scalars
@@ -314,13 +304,11 @@ mod test_util_functions {
     }
 }
 
-/// Tests for VarStepId, BrId, VId, UidDigest
+/// UidDigest
 #[cfg(test)]
 mod test_uid_digest {
 
     use std::str::FromStr;
-
-    use polars::prelude::{AnyValue, DataType};
 
     use super::*;
 
@@ -330,17 +318,6 @@ mod test_uid_digest {
         let c_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 9];
         let uid = UidDigest::<8> { id: c_id };
         assert_eq!(uid.id, [1, 2, 3, 4, 5, 6, 7, 9]);
-    }
-
-    #[test]
-    fn test_str_value_construction() {
-        let str = "sleep_time".to_string();
-        let dtype = DataType::String;
-        let value = Scalar::new(dtype.clone(), AnyValue::String("1.2"));
-
-        // just make sure it doesn't error
-        let uid_res = UidDigest::<8>::from_str_value(&str, &value);
-        assert!(uid_res.is_ok());
     }
 
     #[test]

@@ -73,7 +73,6 @@ impl<const N: usize> UidDigest<N> {
         let out: [u8; N] = digest.as_bytes()[..N].try_into()?;
         Ok(Self { id: out })
     }
-
 }
 
 //     /// Creates a Uid12 from a Hashmap, usually inputs, linking inputs to scalars

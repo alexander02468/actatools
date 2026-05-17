@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use thiserror;
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum StringParseError {
     #[error("Incorrect format")]
     IncorrectFormatGeneral,
@@ -14,9 +14,6 @@ pub enum StringParseError {
 
     #[error("Incorrect format with `{0}`, and `{1}`")]
     IncorrectFormat2(String, String),
-
-    #[error("Incorrect format with `{0}`, `{1}`, and `{2}`")]
-    IncorrectFormat3(String, String, String),
 
     #[error("brackets closed without being opened")]
     TemplatedStringClosedWithoutOpen,

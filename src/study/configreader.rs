@@ -4,9 +4,9 @@
 use std::{io::Read, path::PathBuf};
 
 use crate::{
-    configparsing::{ParsedString, StringParseError, TemplatedString},
     paths::{Directory, FilePath, PathError},
-    study::studyconfig::{ConfigStep, StudyConfiguration, StudySettings}, // studyconfig::{ConfigStep, StudyConfiguration},
+    study::configparsing::{ParsedString, StringParseError, TemplatedString},
+    study::configuration::{ConfigStep, StudyConfiguration, StudySettings}, // studyconfig::{ConfigStep, StudyConfiguration},
 };
 
 pub const DEFAULT_RUN_DIR: &str = "run";

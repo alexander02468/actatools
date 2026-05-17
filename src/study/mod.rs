@@ -1,4 +1,7 @@
+mod configparsing;
 mod configreader;
-mod studyconfig;
-mod studyplan;
+mod configuration;
+mod design;
+mod plan;
+mod planbuilder;
 // mod studyuid;

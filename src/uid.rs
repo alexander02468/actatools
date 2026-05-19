@@ -84,7 +84,7 @@ impl<K: UidPrefix, const N: usize> std::str::FromStr for Uid<K, N> {
 }
 
 #[cfg(test)]
-mod test_Uid {
+mod test_uid {
 
     use std::str::FromStr;
 

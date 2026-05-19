@@ -3,8 +3,6 @@
 
 use std::collections::HashSet;
 
-use thiserror::Error;
-
 use crate::{
     paths::{Directory, FilePath},
     study,
@@ -48,7 +46,7 @@ impl StudyConfiguration {
 
 /// checks for internal agreement of the steps (are all of the steps that referenced defined in here)
 fn check_steps(steps: &Vec<ConfigStep>) -> StepReferenceCheckResult {
-    let step_names: HashSet<&str> = steps.iter().map(|x| x.name.as_str()).collect();
+    let step_names: HashSet<&str> = steps.iter().map(|x| x.name.0.as_str()).collect();
     let step_references: HashSet<&str> = ConfigStep::collect_references(steps);
 
     check_step_references(&step_references, &step_names)
@@ -76,10 +74,24 @@ pub enum StepReferenceCheckResult {
     Fail(Vec<String>),
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ConfigStepName(String);
+impl ConfigStepName{
+    pub fn from(name : impl Into<String>) -> Self {
+        Self(name.into())
+    }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+    pub fn to_string(&self) -> String{
+        self.0.to_string()
+    }
+}
+
 /// struct that holds the step information
 #[derive(Debug)]
 pub struct ConfigStep {
-    pub name: String,
+    pub name: ConfigStepName,
     pub run_args: Vec<TemplatedString>,
     pub run_exe: TemplatedString,
 }
@@ -120,6 +132,8 @@ impl ConfigStep {
 mod test_study_config {
     use std::{collections::HashSet, vec};
 
+    use super::*;
+
     use crate::study::{
         configparsing::ParsedString,
         configuration::{ConfigStep, check_steps},
@@ -128,7 +142,7 @@ mod test_study_config {
     /// Step 1 needs 2
     fn build_step1() -> ConfigStep {
         ConfigStep {
-            name: "test1".to_string(),
+            name: ConfigStepName::from("test1"),
             run_args: vec![
                 ParsedString::from_string("{steps.self}/test.csv")
                     .unwrap()
@@ -146,7 +160,7 @@ mod test_study_config {
     /// Step 2 needs 1
     fn build_step2() -> ConfigStep {
         ConfigStep {
-            name: "test2".to_string(),
+            name: ConfigStepName::from("test2"),
             run_args: vec![
                 ParsedString::from_string("{steps.self}/test.csv")
                     .unwrap()
@@ -164,7 +178,7 @@ mod test_study_config {
     /// Step3 needs 1 + 2
     fn build_step3() -> ConfigStep {
         ConfigStep {
-            name: "test3".to_string(),
+            name: ConfigStepName::from("test3"),
             run_args: vec![
                 ParsedString::from_string("{steps.test2}/test.csv")
                     .unwrap()
@@ -198,7 +212,7 @@ mod test_study_config {
 
         match check_steps(&steps) {
             super::StepReferenceCheckResult::Pass => assert!(false),
-            super::StepReferenceCheckResult::Fail(items) => assert!(true),
+            super::StepReferenceCheckResult::Fail(_) => assert!(true),
         }
     }
 

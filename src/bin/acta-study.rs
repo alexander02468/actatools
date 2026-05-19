@@ -1,10 +1,9 @@
 use actatools::digest;
-use anyhow::{Error};
+use anyhow::Error;
 use clap::{Args, Parser, Subcommand};
 use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
-
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

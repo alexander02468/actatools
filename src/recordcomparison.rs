@@ -756,7 +756,7 @@ mod test_match_engine {
     use std::path::PathBuf;
 
     use crate::{
-        digest::UidDigest,
+        digest::Digest,
         paths::{Directory, FilePath},
     };
 
@@ -772,7 +772,7 @@ mod test_match_engine {
             Some(Directory::new("./").unwrap()),
         )
         .unwrap();
-        let data_digest = UidDigest::<32>::from_str_slice(string_data).unwrap();
+        let data_digest = Digest::<32>::from_str_slice(string_data).unwrap();
         HashedRecordEntry { file, data_digest }
     }
 

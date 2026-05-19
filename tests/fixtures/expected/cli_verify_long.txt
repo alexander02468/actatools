@@ -6,8 +6,8 @@ Summary
 tests/fixtures/foo_foo2_record.json
 
                VERIFIED
-     Expected  c4f70b77e72ef1d87998a172b426336c82f5a9b80cc4869b19e29dae6647c737
-   --> Actual  c4f70b77e72ef1d87998a172b426336c82f5a9b80cc4869b19e29dae6647c737
+     Expected  31d5a2120a7317710d7b93fb7298b6e4b6ae5ff595afc1422d792edc2bde9f12
+   --> Actual  31d5a2120a7317710d7b93fb7298b6e4b6ae5ff595afc1422d792edc2bde9f12
 
   Num Records Verified  2
     Num Records Failed  0

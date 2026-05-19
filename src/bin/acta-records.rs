@@ -239,6 +239,7 @@ fn main() -> Result<(), Error> {
         Commands::Verify(verify_args) => {
             // error out if there are no args + no stdin
             let record_files = verify_args.records.unwrap_or_default();
+
             if record_files.is_empty() && !verify_args.stdin0 && io::stdin().is_terminal() {
                 let mut cmd = RecordArgs::augment_args(clap::Command::new("record"));
                 cmd.error(

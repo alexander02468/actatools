@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
+    array::TryFromSliceError,
     fs::File,
     io::{BufReader, Read},
 };
@@ -16,10 +17,8 @@ use crate::paths::FilePath;
 
 /// Digest container of <N> bytes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct UidDigest<const N: usize> {
-    pub id: [u8; N],
-}
-impl<const N: usize> UidDigest<N> {
+pub struct Digest<const N: usize>(pub [u8; N]);
+impl<const N: usize> Digest<N> {
     /// Function that returns a Hex representation of compacted size width
     /// If the full hex digest fits within `width`, the full digest is returned.
     /// Otherwise, the digest is shortened with `...` in the middle.
@@ -28,10 +27,8 @@ impl<const N: usize> UidDigest<N> {
     /// # Examples
     ///
     /// ```
-    /// # use actatools::digest::UidDigest;
-    /// let digest = UidDigest::<8> {
-    ///     id: [0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90],
-    /// };
+    /// # use actatools::digest::Digest;
+    /// let digest = Digest::<8>([0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90]);
     ///
     /// assert_eq!(
     ///     digest.compact_hex(12),
@@ -65,65 +62,26 @@ impl<const N: usize> UidDigest<N> {
         )
     }
 
-    /// creates a UidDigest from a string slice, hashing the string bytes
+    /// creates a Digest from a string slice, hashing the string bytes
     pub fn from_str_slice(string: &str) -> Result<Self, Error> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(string.as_bytes());
         let digest = blake3::hash(&buf); // 32 bytes
         let out: [u8; N] = digest.as_bytes()[..N].try_into()?;
-        Ok(Self { id: out })
+        Ok(Self(out))
     }
 }
 
-//     /// Creates a Uid12 from a Hashmap, usually inputs, linking inputs to scalars
-//     /// Sorts the names so that it should be order independent, as long as each branch name is unique
-//     pub fn from_branches_with_prefix<'a, B>(prefix: &str, branches: B) -> Result<Self, Error>
-//     where
-//         B: IntoIterator<Item = &'a Branch>,
-//     {
-//         let mut buf: Vec<u8> = Vec::new();
-
-//         let mut branch_vec: Vec<&Branch> = branches.into_iter().collect();
-
-//         // add a check for branch name uniqueness, this is an edge case
-//         let unique_count = branch_vec
-//             .iter()
-//             .map(|x| &x.variable_name)
-//             .collect::<HashSet<_>>()
-//             .len();
-
-//         // error out if they are not the same, indicates they are not all unique
-//         match unique_count == branch_vec.len() {
-//             false => bail!("Multiple copies of variable names in input branches"),
-//             _ => {}
-//         }
-
-//         // sort the branches for repeatability
-//         branch_vec.sort_by_key(|k| &k.variable_name);
-
-//         buf.extend_from_slice(prefix.as_bytes());
-
-//         for b in branch_vec {
-//             buf.extend_from_slice(b.variable_name.as_bytes());
-//             buf.extend(b.value.as_any_value().to_string().as_bytes());
-//         }
-
-//         let digest = blake3::hash(&buf); // 32 bytes
-//         let out: [u8; N] = digest.as_bytes()[..N].try_into().unwrap();
-//         return Ok(Self { id: out });
-//     }
-// }
-
-impl<const N: usize> std::fmt::Display for UidDigest<N> {
+impl<const N: usize> std::fmt::Display for Digest<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for b in &self.id {
+        for b in &self.0 {
             write!(f, "{:02x}", b)?;
         }
         Ok(())
     }
 }
 
-impl<const N: usize> Serialize for UidDigest<N> {
+impl<const N: usize> Serialize for Digest<N> {
     /// Serializes as a Hex String
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -131,7 +89,7 @@ impl<const N: usize> Serialize for UidDigest<N> {
     {
         let mut s = String::with_capacity(N * 2);
 
-        for b in &self.id {
+        for b in &self.0 {
             use std::fmt::Write;
             write!(&mut s, "{:02x}", b).unwrap();
         }
@@ -140,7 +98,7 @@ impl<const N: usize> Serialize for UidDigest<N> {
     }
 }
 
-impl<'de, const N: usize> Deserialize<'de> for UidDigest<N> {
+impl<'de, const N: usize> Deserialize<'de> for Digest<N> {
     /// This is duplicated beloe in the FromStr --> need to refactor
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -149,7 +107,7 @@ impl<'de, const N: usize> Deserialize<'de> for UidDigest<N> {
         struct UidDigestVisitor<const N: usize>;
 
         impl<'de, const N: usize> Visitor<'de> for UidDigestVisitor<N> {
-            type Value = UidDigest<N>;
+            type Value = Digest<N>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(
@@ -181,7 +139,7 @@ impl<'de, const N: usize> Deserialize<'de> for UidDigest<N> {
                     bytes[i] = u8::from_str_radix(&value[start..end], 16).map_err(E::custom)?;
                 }
 
-                Ok(UidDigest { id: bytes })
+                Ok(Digest(bytes))
             }
         }
 
@@ -189,29 +147,24 @@ impl<'de, const N: usize> Deserialize<'de> for UidDigest<N> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UidDigestParseError {
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum DigestError {
+    #[error("Invalid length, expected [{}], actual [{}]", expected, actual)]
     InvalidLength { expected: usize, actual: usize },
+
+    #[error("Invalid Hex String")]
     InvalidHex,
+
+    #[error("Unable to slice Digest u8")]
+    TryFromSliceError(#[from] TryFromSliceError),
 }
 
-impl std::fmt::Display for UidDigestParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UidDigestParseError::InvalidLength { expected, actual } => {
-                writeln!(f, "Invalid Length; expected: {expected}, actual {actual}")
-            }
-            UidDigestParseError::InvalidHex => writeln!(f, "Invalid Hex received"),
-        }
-    }
-}
-
-impl<const N: usize> std::str::FromStr for UidDigest<N> {
-    type Err = UidDigestParseError;
+impl<const N: usize> std::str::FromStr for Digest<N> {
+    type Err = DigestError;
     /// Createes a UidDigest from hex String of detected size
-    fn from_str(hex: &str) -> Result<Self, UidDigestParseError> {
+    fn from_str(hex: &str) -> Result<Self, DigestError> {
         if hex.len() != N * 2 {
-            return Err(UidDigestParseError::InvalidLength {
+            return Err(DigestError::InvalidLength {
                 expected: N * 2,
                 actual: hex.len(),
             });
@@ -220,15 +173,32 @@ impl<const N: usize> std::str::FromStr for UidDigest<N> {
         for i in 0..N {
             let start = i * 2;
             let end = start + 2;
-            bytes[i] = u8::from_str_radix(&hex[start..end], 16)
-                .map_err(|_| UidDigestParseError::InvalidHex)?;
+            bytes[i] =
+                u8::from_str_radix(&hex[start..end], 16).map_err(|_| DigestError::InvalidHex)?;
         }
-        Ok(UidDigest { id: bytes })
+        Ok(Digest(bytes))
     }
 }
 
+pub fn hash_parts<'a, I, const N: usize>(parts: I) -> Result<Digest<N>, DigestError>
+where
+    I: IntoIterator<Item = &'a [u8]>,
+{
+    let mut hasher = blake3::Hasher::new();
+
+    for part in parts {
+        hasher.update(part);
+    }
+
+    let full = hasher.finalize();
+
+    let bytes: [u8; N] = full.as_bytes()[..N].try_into()?; // direct map 
+
+    Ok(Digest(bytes))
+}
+
 /// Helper function to hash a file
-pub fn hash_file<const N: usize>(file: &FilePath) -> Result<UidDigest<N>, Error> {
+pub fn hash_file<const N: usize>(file: &FilePath) -> Result<Digest<N>, Error> {
     let f = File::open(file.get_path()?)?;
     let mut hasher = blake3::Hasher::new();
     let mut reader = BufReader::new(f);
@@ -243,22 +213,25 @@ pub fn hash_file<const N: usize>(file: &FilePath) -> Result<UidDigest<N>, Error>
         hasher.update(&buffer[..bytes_read]);
     }
     let digest: [u8; N] = hasher.finalize().as_bytes()[..N].try_into()?;
-    Ok(UidDigest::<N> { id: digest }) // 32 bytes
+    Ok(Digest::<N>(digest)) // 32 bytes
 }
 
 /// helper function to hash a set of digests stably
 pub fn hash_digests_stable<const N: usize>(
-    digests: Vec<&UidDigest<N>>,
-) -> Result<UidDigest<N>, Error> {
+    digests: Vec<Digest<N>>,
+) -> Result<Digest<N>, DigestError> {
     let mut hasher = blake3::Hasher::new();
 
-    for digest in digests {
-        hasher.update(&digest.id);
+    let mut digests_sorted = digests.clone();
+    digests_sorted.sort();
+
+    for digest in digests_sorted {
+        hasher.update(&digest.0);
     }
 
     let digest: [u8; N] = hasher.finalize().as_bytes()[..N].try_into()?;
 
-    Ok(UidDigest { id: digest })
+    Ok(Digest(digest))
 }
 
 #[cfg(test)]
@@ -272,8 +245,8 @@ mod test_util_functions {
 
     #[test]
     fn test_hash_file() {
-        let expected_foo_bar_digest: UidDigest<32> =
-            UidDigest::from_str("9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c")
+        let expected_foo_bar_digest: Digest<32> =
+            Digest::from_str("9b61116853b99ee97b0ed5d499da7e486d77db52fbc60a2357e5cbf6183d418c")
                 .unwrap();
 
         let foo_bar_filepath = FilePath::new(
@@ -281,25 +254,26 @@ mod test_util_functions {
             Some(Directory::here()),
         )
         .unwrap();
-        let foo_bar_digest: UidDigest<32> = hash_file(&foo_bar_filepath).unwrap();
+        let foo_bar_digest: Digest<32> = hash_file(&foo_bar_filepath).unwrap();
 
         assert_eq!(foo_bar_digest, expected_foo_bar_digest);
     }
 
     #[test]
     fn test_hash_vec() {
-        let digest1 = UidDigest::<8>::from_str("a3f91c7e4b08d2aa").unwrap();
-        let digest2 = UidDigest::<8>::from_str("09ce44f8a1b7d305").unwrap();
+        let digest1 = Digest::<8>::from_str("a3f91c7e4b08d2aa").unwrap();
+        let digest2 = Digest::<8>::from_str("09ce44f8a1b7d305").unwrap();
 
-        let expected_digest = UidDigest {
-            id: [199, 197, 113, 128, 184, 61, 83, 212],
-        };
+        let expected_digest = Digest([216, 82, 110, 144, 124, 18, 99, 217]);
 
-        let digests = vec![&digest1, &digest2];
+        let digests = vec![digest1, digest2];
+        let digests_reversed = vec![digest2, digest1];
 
         let vec_digest = hash_digests_stable(digests).unwrap();
+        let vec_digest_reversed = hash_digests_stable(digests_reversed).unwrap();
 
-        assert_eq!(vec_digest, expected_digest)
+        assert_eq!(vec_digest, expected_digest);
+        assert_eq!(vec_digest_reversed, expected_digest)
     }
 }
 
@@ -315,22 +289,22 @@ mod test_uid_digest {
     #[test]
     fn test_direct_construct() {
         let c_id: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 9];
-        let uid = UidDigest::<8> { id: c_id };
-        assert_eq!(uid.id, [1, 2, 3, 4, 5, 6, 7, 9]);
+        let uid = Digest::<8>(c_id);
+        assert_eq!(uid.0, [1, 2, 3, 4, 5, 6, 7, 9]);
     }
 
     #[test]
     fn test_hexstr_representation() {
         let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
         let hex_str = "ad2adb0860fe8343";
-        let uid = UidDigest::<8>::from_str(hex_str).unwrap();
-        assert_eq!(uid.id, u8_arr);
+        let uid = Digest::<8>::from_str(hex_str).unwrap();
+        assert_eq!(uid.0, u8_arr);
     }
 
     #[test]
     fn test_to_hexstr_representation() {
         let u8_arr: [u8; 8] = [173, 42, 219, 8, 96, 254, 131, 67];
-        let uid = UidDigest::<8> { id: u8_arr };
+        let uid = Digest::<8>(u8_arr);
 
         let hex_string = format!("{uid}");
 
@@ -342,21 +316,26 @@ mod test_uid_digest {
     #[test]
     fn test_too_long_hex() {
         let hex_str = "ad2adb0860fe8343ad2adb0860fe8343".to_string();
-        let uid = UidDigest::<8>::from_str(&hex_str);
-        assert_eq!(
-            uid.unwrap_err(),
-            UidDigestParseError::InvalidLength {
+        let uid_res = Digest::<8>::from_str(&hex_str);
+
+        match uid_res.unwrap_err() {
+            DigestError::InvalidLength {
                 expected: 16,
-                actual: 32
-            }
-        );
+                actual: 32,
+            } => assert!(true),
+            _ => assert!(false),
+        }
     }
 
     #[test]
     fn test_non_hex_str() {
         // throw some zz in there
         let hex_str = "ad2adb0860fe83zz".to_string();
-        let uid = UidDigest::<8>::from_str(&hex_str);
-        assert_eq!(uid.unwrap_err(), UidDigestParseError::InvalidHex);
+        let uid_res = Digest::<8>::from_str(&hex_str);
+
+        match uid_res.unwrap_err() {
+            DigestError::InvalidHex => assert!(true),
+            _ => assert!(false),
+        }
     }
 }

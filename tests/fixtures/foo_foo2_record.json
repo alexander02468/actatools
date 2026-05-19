@@ -2,10 +2,10 @@
   "metadata": {
     "record_format": 1,
     "generated_by": "actatools",
-    "library_version": "0.3.0",
+    "library_version": "0.4.0",
     "digest_algorithm": "BLAKE3",
-    "generated_at_utc": "2026-05-11 8:13:47.160692 +00:00:00",
-    "meta_digest": "0697aab5274d1759de76b22ecc40ef96e45c6d1d49f9892efd7702f00cafdf67"
+    "generated_at_utc": "2026-05-19 1:40:28.964062 +00:00:00",
+    "meta_digest": "b91e923dff0c88391a86191846cd368331a008e3492e2c499dcb35fca1c625e2"
   },
   "record_entries": [
     {
@@ -17,5 +17,5 @@
       "data_digest": "99ff9c6740efe27e636aa330624a28f19ee96f5f844d1eee0192590d07e6c245"
     }
   ],
-  "digest": "c4f70b77e72ef1d87998a172b426336c82f5a9b80cc4869b19e29dae6647c737"
+  "digest": "31d5a2120a7317710d7b93fb7298b6e4b6ae5ff595afc1422d792edc2bde9f12"
 }

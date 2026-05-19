@@ -120,7 +120,10 @@ impl ConfigStep {
 mod test_study_config {
     use std::{collections::HashSet, vec};
 
-    use crate::study::{configparsing::ParsedString, configuration::{ConfigStep, check_steps}};
+    use crate::study::{
+        configparsing::ParsedString,
+        configuration::{ConfigStep, check_steps},
+    };
 
     /// Step 1 needs 2
     fn build_step1() -> ConfigStep {
@@ -179,24 +182,21 @@ mod test_study_config {
     #[test]
     fn test_check_step_references() {
         let steps = vec![build_step1(), build_step2(), build_step3()];
-        match check_steps(&steps){
+        match check_steps(&steps) {
             super::StepReferenceCheckResult::Pass => assert!(true),
-            super::StepReferenceCheckResult::Fail(items) =>{
+            super::StepReferenceCheckResult::Fail(items) => {
                 dbg!(&items);
 
-
-             assert!(false)
-        },
+                assert!(false)
+            }
         }
-        
-
     }
 
     #[test]
     fn test_missing_references() {
         let steps = vec![build_step1(), build_step3()];
 
-        match check_steps(&steps){
+        match check_steps(&steps) {
             super::StepReferenceCheckResult::Pass => assert!(false),
             super::StepReferenceCheckResult::Fail(items) => assert!(true),
         }

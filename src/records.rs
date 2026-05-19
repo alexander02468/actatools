@@ -16,7 +16,7 @@ use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::digest::{UidDigest, hash_digests_stable};
+use crate::digest::{Digest, hash_digests_stable};
 use crate::{
     digest::hash_file,
     paths::{Directory, FilePath, PathError},
@@ -92,7 +92,7 @@ impl RecordIncludes {
             Vec::with_capacity(self.record_entries.len());
 
         // collect all the digests, hash at the end (for order agnostic hashing)
-        let mut digests_vec: Vec<UidDigest<RECORD_ENTRY_LEN>> =
+        let mut digests_vec: Vec<Digest<RECORD_ENTRY_LEN>> =
             Vec::with_capacity(self.record_entries.len());
 
         for record_entry in self.record_entries.into_iter() {
@@ -101,7 +101,7 @@ impl RecordIncludes {
             hashed_record_entries.push(hashed_record);
         }
 
-        let digest = hash_digests_stable(digests_vec.iter().collect())?;
+        let digest = hash_digests_stable(digests_vec.iter().copied().collect())?;
 
         Ok(Record {
             metadata: Some(RecordMetadata::current()?),
@@ -130,7 +130,7 @@ impl UnhashedRecordEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashedRecordEntry {
     pub file: FilePath,
-    pub data_digest: UidDigest<RECORD_ENTRY_LEN>,
+    pub data_digest: Digest<RECORD_ENTRY_LEN>,
 }
 
 impl HashedRecordEntry {
@@ -156,7 +156,7 @@ impl HashedRecordEntry {
 pub struct Record {
     metadata: Option<RecordMetadata>,
     pub record_entries: Vec<HashedRecordEntry>,
-    digest: UidDigest<RECORD_ENTRY_LEN>,
+    digest: Digest<RECORD_ENTRY_LEN>,
 }
 
 impl Record {
@@ -170,12 +170,12 @@ impl Record {
             .collect::<Result<Vec<_>, Error>>()?;
 
         // reverify the record digest as well
-        let mut record_entry_digests: Vec<&UidDigest<RECORD_ENTRY_LEN>> =
+        let mut record_entry_digests: Vec<Digest<RECORD_ENTRY_LEN>> =
             Vec::with_capacity(record_entry_verifications.len());
         for rv in &record_entry_verifications {
             match &rv.hash_verification {
-                HashVerification::Verified(uid_digest) => record_entry_digests.push(uid_digest),
-                HashVerification::MismatchedHash { old: _, new } => record_entry_digests.push(new),
+                HashVerification::Verified(uid_digest) => record_entry_digests.push(*uid_digest),
+                HashVerification::MismatchedHash { old: _, new } => record_entry_digests.push(*new),
             }
         }
 
@@ -251,7 +251,7 @@ pub struct RecordMetadata {
     pub library_version: String,
     pub digest_algorithm: String,
     pub generated_at_utc: String,
-    pub meta_digest: UidDigest<32>,
+    pub meta_digest: Digest<32>,
 }
 
 impl RecordMetadata {
@@ -272,7 +272,7 @@ impl RecordMetadata {
         meta_string.push_str(&digest_algorithm);
         meta_string.push_str(" ");
         meta_string.push_str(&generated_at_utc);
-        let meta_digest = UidDigest::<32>::from_str_slice(&meta_string)?;
+        let meta_digest = Digest::<32>::from_str_slice(&meta_string)?;
 
         Ok(Self {
             record_format,
@@ -299,10 +299,10 @@ struct RecordEntryVerification<'a> {
 
 #[derive(Debug, Clone)]
 enum HashVerification {
-    Verified(UidDigest<RECORD_ENTRY_LEN>),
+    Verified(Digest<RECORD_ENTRY_LEN>),
     MismatchedHash {
-        old: UidDigest<RECORD_ENTRY_LEN>,
-        new: UidDigest<RECORD_ENTRY_LEN>,
+        old: Digest<RECORD_ENTRY_LEN>,
+        new: Digest<RECORD_ENTRY_LEN>,
     },
 }
 
@@ -334,7 +334,7 @@ impl std::error::Error for RecordError {}
 struct RecordOutputView<'a> {
     metadata: &'a Option<RecordMetadata>,
     record_entries: Vec<HashedRecordEntryOutputView<'a>>,
-    digest: &'a UidDigest<RECORD_ENTRY_LEN>,
+    digest: &'a Digest<RECORD_ENTRY_LEN>,
 }
 
 impl<'a> RecordOutputView<'a> {
@@ -379,7 +379,7 @@ impl<'a> RecordOutputView<'a> {
 #[derive(Debug, serde::Serialize)]
 struct HashedRecordEntryOutputView<'a> {
     file: FilePath,
-    data_digest: &'a UidDigest<RECORD_ENTRY_LEN>,
+    data_digest: &'a Digest<RECORD_ENTRY_LEN>,
 }
 
 /// Write a Record to the writeable object, where the reference directory can be set

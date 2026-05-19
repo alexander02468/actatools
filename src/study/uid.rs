@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use crate::digest::UidDigest;
-use crate::{paths::FilePath, study::studyplan::Branch};
+use crate::{paths::FilePath, study::plan::Branch};
 
 // # of bytes to use in the digest length for the IDs. This affects naming
 pub const BRID_DIGEST_LEN: usize = 8;

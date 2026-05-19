@@ -1,6 +1,7 @@
 pub mod configparsing;
 pub mod configreader;
 pub mod configuration;
+pub mod dag;
 pub mod design;
 pub mod executionplan;
 pub mod orchestrator;

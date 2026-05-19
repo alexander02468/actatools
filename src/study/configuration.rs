@@ -5,12 +5,11 @@ use std::collections::HashSet;
 
 use crate::{
     paths::{Directory, FilePath},
-    study,
-    study::configparsing::TemplatedString,
+    study::{self, configparsing::TemplatedString, design::VariableName},
 };
 
 #[derive(Debug, thiserror::Error)]
-enum StudyConfigurationError {
+pub enum StudyConfigurationError {
     #[error("Referenced step definitions missing: {}", .0.join(", "))]
     StepReferenceVerificationFail(Vec<String>),
 }
@@ -46,20 +45,20 @@ impl StudyConfiguration {
 
 /// checks for internal agreement of the steps (are all of the steps that referenced defined in here)
 fn check_steps(steps: &Vec<ConfigStep>) -> StepReferenceCheckResult {
-    let step_names: HashSet<&str> = steps.iter().map(|x| x.name.0.as_str()).collect();
-    let step_references: HashSet<&str> = ConfigStep::collect_references(steps);
+    let step_names: HashSet<ConfigStepName> = steps.iter().map(|x| x.name.clone()).collect();
+    let step_references: HashSet<ConfigStepName> = ConfigStep::collect_references(steps);
 
     check_step_references(&step_references, &step_names)
 }
 
 /// checks if step_references_b are in step_references a, and returns any that are missing
 fn check_step_references(
-    steps_references_a: &HashSet<&str>,
-    steps_references_b: &HashSet<&str>,
+    steps_references_a: &HashSet<ConfigStepName>,
+    steps_references_b: &HashSet<ConfigStepName>,
 ) -> StepReferenceCheckResult {
-    let missing: Vec<&str> = steps_references_a
+    let missing: Vec<ConfigStepName> = steps_references_a
         .difference(&steps_references_b)
-        .copied()
+        .cloned()
         .collect();
 
     match missing.len() {
@@ -74,16 +73,16 @@ pub enum StepReferenceCheckResult {
     Fail(Vec<String>),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ConfigStepName(String);
-impl ConfigStepName{
-    pub fn from(name : impl Into<String>) -> Self {
+impl ConfigStepName {
+    pub fn from(name: impl Into<String>) -> Self {
         Self(name.into())
     }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
-    pub fn to_string(&self) -> String{
+    pub fn to_string(&self) -> String {
         self.0.to_string()
     }
 }
@@ -98,15 +97,15 @@ pub struct ConfigStep {
 
 impl ConfigStep {
     /// Gets all the referenced steps as strings in this Step
-    pub fn get_referenced_steps(&self) -> HashSet<&str> {
-        let mut referenced_steps: HashSet<&str> = HashSet::new();
+    pub fn get_referenced_steps(&self) -> HashSet<ConfigStepName> {
+        let mut referenced_steps: HashSet<ConfigStepName> = HashSet::new();
 
         // look for the TemplatedStringPart through all the run_args
         for arg in &self.run_args {
             for p in &arg.parts {
                 match p {
                     crate::study::configparsing::TemplatedStringPart::Step(s) => {
-                        referenced_steps.insert(s.as_str());
+                        referenced_steps.insert(ConfigStepName::from(s));
                     }
                     _ => {}
                 }
@@ -115,11 +114,28 @@ impl ConfigStep {
         referenced_steps
     }
 
-    pub fn collect_references<'a, S>(steps: S) -> HashSet<&'a str>
+    pub fn get_referenced_variables(&self) -> HashSet<VariableName> {
+        let mut referenced_variables: HashSet<VariableName> = HashSet::new();
+
+        // look for the TemplatedStringPart through all the run_args
+        for arg in &self.run_args {
+            for p in &arg.parts {
+                match p {
+                    crate::study::configparsing::TemplatedStringPart::StudyVariable(s) => {
+                        referenced_variables.insert(VariableName::new(s));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        referenced_variables
+    }
+
+    pub fn collect_references<'a, S>(steps: S) -> HashSet<ConfigStepName>
     where
         S: IntoIterator<Item = &'a ConfigStep>,
     {
-        let mut references: HashSet<&'a str> = HashSet::new();
+        let mut references: HashSet<ConfigStepName> = HashSet::new();
         for step in steps {
             references.extend(step.get_referenced_steps())
         }
@@ -220,8 +236,9 @@ mod test_study_config {
     fn test_get_referenced_steps() {
         let step1 = build_step1();
         let referenced_steps = step1.get_referenced_steps();
-        let actual_step_references: HashSet<&str> =
-            HashSet::from_iter(vec!["test2", "test1"].into_iter());
+        let actual_step_references: HashSet<ConfigStepName> = HashSet::from_iter(
+            vec![ConfigStepName::from("test2"), ConfigStepName::from("test1")].into_iter(),
+        );
 
         assert_eq!(referenced_steps, actual_step_references);
     }

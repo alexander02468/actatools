@@ -5,7 +5,10 @@ use std::{io::Read, path::PathBuf};
 
 use crate::{
     paths::{Directory, FilePath, PathError},
-    study::{configparsing::{ParsedString, StringParseError, TemplatedString}, configuration::{ConfigStep, ConfigStepName, StudyConfiguration, StudySettings}}, // studyconfig::{ConfigStep, StudyConfiguration},
+    study::{
+        configparsing::{ParsedString, StringParseError, TemplatedString},
+        configuration::{ConfigStep, ConfigStepName, StudyConfiguration, StudySettings},
+    }, // studyconfig::{ConfigStep, StudyConfiguration},
 };
 
 pub const DEFAULT_RUN_DIR: &str = "run";
@@ -206,7 +209,10 @@ mod test {
         );
 
         assert_eq!(study_config.steps.len(), 1);
-        assert_eq!(study_config.steps[0].name, ConfigStepName::from("preprocess"));
+        assert_eq!(
+            study_config.steps[0].name,
+            ConfigStepName::from("preprocess")
+        );
     }
 
     #[test]

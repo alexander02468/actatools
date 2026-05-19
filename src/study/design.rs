@@ -173,7 +173,6 @@ pub struct StudyDesignBuilder<'a> {
     variables: Vec<&'a str>,
 }
 impl<'a> StudyDesignBuilder<'a> {
-
     /// Builds a StudyDesign using a Reader
     pub fn build_from_reader<R: Read>(
         &self,
@@ -247,73 +246,44 @@ mod tests {
 
     #[test]
     fn branch_ids_are_stable_for_same_name_and_value() {
-        let b1 = VariableBranch::new(
-            VariableName::new("alpha"),
-            VariableValue::new("1"),
-        )
-        .unwrap();
+        let b1 = VariableBranch::new(VariableName::new("alpha"), VariableValue::new("1")).unwrap();
 
-        let b2 = VariableBranch::new(
-            VariableName::new("alpha"),
-            VariableValue::new("1"),
-        )
-        .unwrap();
+        let b2 = VariableBranch::new(VariableName::new("alpha"), VariableValue::new("1")).unwrap();
 
         assert_eq!(b1.uid, b2.uid);
     }
 
     #[test]
     fn branch_ids_differ_for_different_values() {
-        let b1 = VariableBranch::new(
-            VariableName::new("alpha"),
-            VariableValue::new("1"),
-        )
-        .unwrap();
+        let b1 = VariableBranch::new(VariableName::new("alpha"), VariableValue::new("1")).unwrap();
 
-        let b2 = VariableBranch::new(
-            VariableName::new("alpha"),
-            VariableValue::new("2"),
-        )
-        .unwrap();
+        let b2 = VariableBranch::new(VariableName::new("alpha"), VariableValue::new("2")).unwrap();
 
         assert_ne!(b1.uid, b2.uid);
     }
 
     #[test]
     fn variable_branch_rejects_empty_variable_name() {
-        let err = VariableBranch::new(
-            VariableName::new("   "),
-            VariableValue::new("1"),
-        )
-        .unwrap_err();
+        let err =
+            VariableBranch::new(VariableName::new("   "), VariableValue::new("1")).unwrap_err();
 
         assert!(matches!(err, BranchError::EmptyVariableName(_)));
     }
 
     #[test]
     fn variable_branch_rejects_empty_variable_value() {
-        let err = VariableBranch::new(
-            VariableName::new("alpha"),
-            VariableValue::new("   "),
-        )
-        .unwrap_err();
+        let err =
+            VariableBranch::new(VariableName::new("alpha"), VariableValue::new("   ")).unwrap_err();
 
         assert!(matches!(err, BranchError::EmptyVariableValue(_)));
     }
 
     #[test]
     fn variation_ids_are_order_invariant() {
-        let b1 = VariableBranch::new(
-            VariableName::new("alpha"),
-            VariableValue::new("1"),
-        )
-        .unwrap();
+        let b1 = VariableBranch::new(VariableName::new("alpha"), VariableValue::new("1")).unwrap();
 
-        let b2 = VariableBranch::new(
-            VariableName::new("beta"),
-            VariableValue::new("fast"),
-        )
-        .unwrap();
+        let b2 =
+            VariableBranch::new(VariableName::new("beta"), VariableValue::new("fast")).unwrap();
 
         let v1 = Variation::new([b1.uid, b2.uid]).unwrap();
         let v2 = Variation::new([b2.uid, b1.uid]).unwrap();
@@ -331,9 +301,7 @@ alpha,beta
 
         let builder = builder(vec!["alpha", "beta"]);
 
-        let design = builder
-            .build_from_reader(csv.as_bytes())
-            .unwrap();
+        let design = builder.build_from_reader(csv.as_bytes()).unwrap();
 
         assert_eq!(design.variations.len(), 2);
 
@@ -354,9 +322,7 @@ alpha,beta
 
         let builder = builder(vec!["alpha", "beta"]);
 
-        let design = builder
-            .build_from_reader(csv.as_bytes())
-            .unwrap();
+        let design = builder.build_from_reader(csv.as_bytes()).unwrap();
 
         assert_eq!(design.variations.len(), 1);
         assert_eq!(design.branches.len(), 2);
@@ -372,9 +338,7 @@ alpha,beta
 
         let builder = builder(vec!["alpha", "beta"]);
 
-        let design = builder
-            .build_from_reader(csv.as_bytes())
-            .unwrap();
+        let design = builder.build_from_reader(csv.as_bytes()).unwrap();
 
         assert_eq!(design.variations.len(), 2);
 
@@ -386,10 +350,7 @@ alpha,beta
             design.variations[1].branch_ids,
         );
 
-        assert_eq!(
-            design.variations[0].uid,
-            design.variations[1].uid,
-        );
+        assert_eq!(design.variations[0].uid, design.variations[1].uid,);
     }
 
     #[test]
@@ -401,14 +362,11 @@ alpha,beta
 
         let builder = builder(vec!["alpha", "gamma"]);
 
-        let err = builder
-            .build_from_reader(csv.as_bytes())
-            .unwrap_err();
+        let err = builder.build_from_reader(csv.as_bytes()).unwrap_err();
 
         assert!(matches!(
             err,
             StudyDesignBuildError::MissingVariable(var) if var == "gamma"
         ));
     }
-
 }

@@ -63,7 +63,7 @@ impl<const N: usize> Digest<N> {
     }
 
     /// creates a Digest from a string slice, hashing the string bytes
-    pub fn from_str_slice(string: &str) -> Result<Self, Error> {
+    pub fn from_str_slice(string: &str) -> Result<Self, DigestError> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(string.as_bytes());
         let digest = blake3::hash(&buf); // 32 bytes

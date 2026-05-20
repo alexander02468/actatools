@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use thiserror;
 
+use crate::study::design::{VariableName, VariableValue};
+
 #[derive(Debug, thiserror::Error)]
 pub enum StringParseError {
     #[error("Incorrect format")]
@@ -178,7 +180,7 @@ impl std::fmt::Display for TemplatedStringPart {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum TemplatedStringError {
     #[error("Key `{0}` not found in context map")]
     MissingContextKey(String),
@@ -190,26 +192,35 @@ pub struct TemplatedString {
 }
 
 impl TemplatedString {
-    /// creates a string using the context_map to map templated parts to realizations
-    pub fn realize_to_string(
-        &self,
-        context_map: &HashMap<TemplatedStringPart, String>,
-    ) -> Result<String, TemplatedStringError> {
-        let mut out_str = String::new();
+    pub fn into_varstep_templated_string(
+        self,
+        variable_values: &HashMap<&VariableName, &VariableValue>,
+    ) -> Result<VarStepTemplatedString, TemplatedStringError> {
+        let mut parts: Vec<VarStepTemplatedStringPart> = Vec::with_capacity(self.parts.len());
 
-        for p in &self.parts {
-            let str_to_add = match p {
-                TemplatedStringPart::Literal(s) => s.as_str(),
+        // move the templated string parts over except for the variable, replace that with context_map
+        for part in self.parts {
+            let varstep_part = match part {
+                TemplatedStringPart::Literal(s) => VarStepTemplatedStringPart::Literal(s),
+                TemplatedStringPart::Step(name) => VarStepTemplatedStringPart::Step(name),
+                TemplatedStringPart::StudyVariable(v) => {
+                    let varname = VariableName::new(v.clone());
+                    let varvalue = *variable_values.get(&varname).ok_or_else(|| {
+                        TemplatedStringError::MissingContextKey(varname.to_string())
+                    })?;
 
-                other => context_map
-                    .get(p)
-                    .ok_or_else(|| TemplatedStringError::MissingContextKey(other.to_string()))?
-                    .as_str(),
+                    VarStepTemplatedStringPart::StudyVariable {
+                        varname,
+                        varvalue: varvalue.clone(),
+                    }
+                }
+                TemplatedStringPart::StudyShared => VarStepTemplatedStringPart::StudyShared,
             };
 
-            out_str.push_str(str_to_add);
+            parts.push(varstep_part)
         }
-        Ok(out_str)
+
+        Ok(VarStepTemplatedString { parts })
     }
 }
 
@@ -222,6 +233,35 @@ impl std::fmt::Display for TemplatedString {
 
         write!(f, "{out_str}")
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum VarStepTemplatedStringPart {
+    Literal(String),
+    Step(String),
+    StudyShared,
+    StudyVariable {
+        varname: VariableName,
+        varvalue: VariableValue,
+    },
+}
+impl std::fmt::Display for VarStepTemplatedStringPart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            VarStepTemplatedStringPart::Literal(s) => write!(f, "{s}"),
+            VarStepTemplatedStringPart::Step(name) => write!(f, "<steps.{name}.files>"),
+            VarStepTemplatedStringPart::StudyShared => write!(f, "<shared>"),
+            VarStepTemplatedStringPart::StudyVariable { varname, varvalue } => {
+                write!(f, "<{varname}:{varvalue}>")
+            }
+        }
+    }
+}
+
+/// Templated String in the VarStep with all variables realized (so not Variable template exists)
+#[derive(Debug, Clone)]
+pub struct VarStepTemplatedString {
+    parts: Vec<VarStepTemplatedStringPart>,
 }
 
 /// unit test cases for ParsedString, ParsedPart

@@ -6,8 +6,8 @@ use std::{io::Read, path::PathBuf};
 use crate::{
     paths::{Directory, FilePath, PathError},
     study::{
-        configparsing::{ParsedString, StringParseError, TemplatedString},
         configuration::{ConfigStep, ConfigStepName, StudyConfiguration, StudySettings},
+        templatedstring::{ParsedString, StringParseError, TemplatedString},
     }, // studyconfig::{ConfigStep, StudyConfiguration},
 };
 

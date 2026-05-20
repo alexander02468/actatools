@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use crate::{
     paths::{Directory, FilePath},
-    study::{self, configparsing::TemplatedString, design::VariableName},
+    study::{self, design::VariableName, templatedstring::TemplatedString},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -87,8 +87,14 @@ impl ConfigStepName {
     }
 }
 
+impl std::fmt::Display for ConfigStepName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+
 /// struct that holds the step information
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigStep {
     pub name: ConfigStepName,
     pub run_args: Vec<TemplatedString>,
@@ -104,7 +110,7 @@ impl ConfigStep {
         for arg in &self.run_args {
             for p in &arg.parts {
                 match p {
-                    crate::study::configparsing::TemplatedStringPart::Step(s) => {
+                    crate::study::templatedstring::TemplatedStringPart::Step(s) => {
                         referenced_steps.insert(ConfigStepName::from(s));
                     }
                     _ => {}
@@ -121,7 +127,7 @@ impl ConfigStep {
         for arg in &self.run_args {
             for p in &arg.parts {
                 match p {
-                    crate::study::configparsing::TemplatedStringPart::StudyVariable(s) => {
+                    crate::study::templatedstring::TemplatedStringPart::StudyVariable(s) => {
                         referenced_variables.insert(VariableName::new(s));
                     }
                     _ => {}
@@ -151,8 +157,8 @@ mod test_study_config {
     use super::*;
 
     use crate::study::{
-        configparsing::ParsedString,
         configuration::{ConfigStep, check_steps},
+        templatedstring::ParsedString,
     };
 
     /// Step 1 needs 2

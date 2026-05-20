@@ -1,4 +1,3 @@
-pub mod configparsing;
 pub mod configreader;
 pub mod configuration;
 pub mod dag;
@@ -6,5 +5,6 @@ pub mod design;
 pub mod executionplan;
 pub mod orchestrator;
 pub mod plan;
-mod planbuilder;
+pub mod planbuilder;
+pub mod templatedstring;
 // mod uid;

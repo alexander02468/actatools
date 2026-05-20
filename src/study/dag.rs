@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
-    collections::{HashMap, HashSet}, fmt::Debug, hash::Hash
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
 };
 
 use daggy::{NodeIndex, petgraph::Direction};
@@ -58,15 +60,12 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
             by_node.insert(n.clone(), idx);
         }
 
-        let empty_set : HashSet<T> = HashSet::new();
+        let empty_set: HashSet<T> = HashSet::new();
 
         // now add the edges, should go from the parent to the child
         for n in nodes {
-            
             // assume there are no dependencies if not provided
-            let n_parents = dependencies
-                .get(&n)
-                .unwrap_or(&empty_set);
+            let n_parents = dependencies.get(&n).unwrap_or(&empty_set);
 
             for n_parent in n_parents {
                 let n_parent_idx = by_node
@@ -81,18 +80,18 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
         Ok(Self { dag, by_node })
     }
 
-    fn get_by_node(&self, node: T) -> Result<NodeIndex, DagError> {
+    fn get_by_node(&self, node: &T) -> Result<NodeIndex, DagError> {
         let node_idx = self
             .by_node
-            .get(&node)
+            .get(node)
             .ok_or_else(|| DagError::MissingTInGraph)?;
 
         Ok(*node_idx)
     }
 
     /// Returns an iterator walking the parents of the node T
-    pub fn parents(&self, node: T) -> Result<impl Iterator<Item = &T> + '_, DagError> {
-        let node_idx = self.get_by_node(node)?;
+    pub fn parents(&self, node: &T) -> Result<impl Iterator<Item = &T> + '_, DagError> {
+        let node_idx = self.get_by_node(&node)?;
         Ok(self
             .dag
             .graph()
@@ -101,8 +100,8 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
     }
 
     /// Returns an iterator walking the chilren of node T
-    pub fn children(&self, node: T) -> Result<impl Iterator<Item = &T> + '_, DagError> {
-        let node_idx = self.get_by_node(node)?;
+    pub fn children(&self, node: &T) -> Result<impl Iterator<Item = &T> + '_, DagError> {
+        let node_idx = self.get_by_node(&node)?;
         Ok(self
             .dag
             .graph()
@@ -180,10 +179,10 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let solve_parents = sorted_strings(dag.parents("solve".to_string()).unwrap());
+        let solve_parents = sorted_strings(dag.parents(&"solve".to_string()).unwrap());
         assert_eq!(solve_parents, vec!["preprocess"]);
 
-        let solve_children = sorted_strings(dag.children("solve".to_string()).unwrap());
+        let solve_children = sorted_strings(dag.children(&"solve".to_string()).unwrap());
         assert_eq!(solve_children, vec!["postprocess"]);
     }
 
@@ -202,7 +201,7 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let parents = sorted_strings(dag.parents("solve".to_string()).unwrap());
+        let parents = sorted_strings(dag.parents(&"solve".to_string()).unwrap());
         assert_eq!(parents, vec!["mesh", "preprocess"]);
     }
 
@@ -220,7 +219,7 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let children = sorted_strings(dag.children("prepare".to_string()).unwrap());
+        let children = sorted_strings(dag.children(&"prepare".to_string()).unwrap());
         assert_eq!(children, vec!["solve_a", "solve_b"]);
     }
 
@@ -269,7 +268,7 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let res = dag.parents("missing".to_string());
+        let res = dag.parents(&"missing".to_string());
 
         match res {
             Ok(_) => assert!(false),
@@ -288,7 +287,7 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let res = dag.children("missing".to_string());
+        let res = dag.children(&"missing".to_string());
 
         match res {
             Ok(_) => assert!(false),
@@ -310,7 +309,7 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let parents = sorted_strings(dag.parents("root".to_string()).unwrap());
+        let parents = sorted_strings(dag.parents(&"root".to_string()).unwrap());
         assert!(parents.is_empty());
     }
 
@@ -325,7 +324,7 @@ mod tests {
 
         let dag = builder.into_dag().unwrap();
 
-        let children = sorted_strings(dag.children("child".to_string()).unwrap());
+        let children = sorted_strings(dag.children(&"child".to_string()).unwrap());
         assert!(children.is_empty());
     }
 }

@@ -41,6 +41,7 @@ pub enum StudyDesignBuildError {
 #[derive(Debug)]
 pub struct StudyDesign {
     pub branches: HashMap<BrId, VariableBranch>,
+    pub by_variable_name: HashMap<VariableName, Vec<BrId>>,
     pub variations: Vec<Variation>,
 }
 
@@ -148,6 +149,12 @@ impl VariableName {
     }
 }
 
+impl std::fmt::Display for VariableName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Represents a value of a variable. Only Strings are represented at the moment, but already abstracting in case we need
 /// to have type safety or want to support variable value types
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -195,6 +202,7 @@ impl<'a> StudyDesignBuilder<'a> {
 
         // now loop through and build the Branches and Variations
         let mut variations: Vec<Variation> = Vec::new();
+        let mut by_variable_name: HashMap<VariableName, Vec<BrId>> = HashMap::new();
         let mut branches: HashMap<BrId, VariableBranch> = HashMap::new();
 
         for (row_idx, r) in reader.records().enumerate() {
@@ -208,7 +216,12 @@ impl<'a> StudyDesignBuilder<'a> {
                 })?;
 
                 let b = VariableBranch::new(VariableName::new(*var), VariableValue::new(val))?;
+                by_variable_name
+                    .entry(b.name.clone())
+                    .or_default()
+                    .push(b.uid);
                 variation_brids.push(b.uid);
+
                 branches.insert(b.uid, b);
             }
 
@@ -217,6 +230,7 @@ impl<'a> StudyDesignBuilder<'a> {
 
         Ok(StudyDesign {
             branches,
+            by_variable_name,
             variations,
         })
     }

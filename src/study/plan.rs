@@ -3,7 +3,7 @@
 
 pub const VARSTEPID_DIGEST_LEN: usize = 8;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use crate::{
     digest::{Digest, hash_digests_stable},
@@ -79,5 +79,41 @@ impl VarStepId {
         let varstep_digest = hash_digests_stable(digests)?;
 
         Ok(Self::new(varstep_digest))
+    }
+}
+
+#[cfg(test)]
+mod test_plan {
+    use crate::study::{
+        configuration::ConfigStepName,
+        design::{VariableBranch, VariableName, VariableValue},
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_varstepid() {
+        let branch1 =
+            VariableBranch::new(VariableName::new("foo"), VariableValue::new("value")).unwrap();
+        let config_name = ConfigStepName::from("name");
+
+        let varstep_id = VarStepId::from_step_branches(&config_name, vec![branch1.uid]).unwrap();
+
+        let digest_expected: Digest<8> = Digest([202, 4, 167, 137, 136, 206, 120, 68]);
+        let varstep_id_expected = VarStepId::new(digest_expected);
+
+        assert_eq!(varstep_id, varstep_id_expected)
+    }
+
+    #[test]
+    fn test_varstepid_no_branches() {
+        let config_name = ConfigStepName::from("name");
+
+        let varstep_id = VarStepId::from_step_branches(&config_name, vec![]).unwrap();
+
+        let digest_expected: Digest<8> = Digest([178, 24, 98, 207, 94, 229, 102, 185]);
+        let varstep_id_expected = VarStepId::new(digest_expected);
+
+        assert_eq!(varstep_id, varstep_id_expected)
     }
 }

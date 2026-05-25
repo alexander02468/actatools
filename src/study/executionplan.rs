@@ -2,3 +2,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 pub struct StudyExecutionPlan;
+
+pub struct ExecutionStep;

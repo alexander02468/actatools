@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
-    collections::{HashMap, HashSet, hash_map},
+    collections::{HashMap, HashSet},
     env::var,
 };
 
@@ -33,6 +33,12 @@ pub enum StudyPlanBuildError {
 
     #[error(transparent)]
     UidError(#[from] UidError),
+
+    #[error(transparent)]
+    VarStepDependencyBuildError(#[from] VarStepDependencyBuildError),
+
+    #[error("Variable {} is missing", .0)]
+    VarStepVariableMissing(VariableName),
 }
 
 #[derive(Debug)]
@@ -45,90 +51,30 @@ impl StudyPlanBuilder {
     ) -> Result<StudyPlan, StudyPlanBuildError> {
         // DAG verification
 
-        let mut dag_builder = DagBuilder::<ConfigStepName>::new();
-        // build the dependency tree --> each Step needs to know what Branches it depends on (even upstream)
-        for step in &study_config.steps {
-            dag_builder.add_node(step.name.clone(), step.get_referenced_steps())?;
-        }
-
-        let config_step_dag = dag_builder.into_dag()?;
-
         let mut steps_map: HashMap<ConfigStepName, &ConfigStep> =
             HashMap::with_capacity(study_config.steps.len());
         for s in &study_config.steps {
             steps_map.insert(s.name.clone(), s);
         }
 
-        // generate the ancestry
-        let config_step_ancestries: Vec<ConfigStepAncestry> = study_config
-            .steps
-            .iter()
-            .map(|x| Self::create_config_step_ancestry(x, &steps_map, &config_step_dag))
-            .collect::<Result<Vec<_>, StudyPlanBuildError>>()?;
-        // re-organize the step ancestry into a mp, indexed by the name
-        let mut config_step_ancestries_map: HashMap<ConfigStepName, &ConfigStepAncestry> =
-            HashMap::with_capacity(config_step_ancestries.len());
-        for ancestry in &config_step_ancestries {
-            config_step_ancestries_map.insert(ancestry.name.clone(), ancestry);
-        }
+        let config_step_dag = Self::build_step_dag(&study_config)?;
+
+        let config_step_ancestries_map =
+            Self::generate_step_ancestries(&study_config, steps_map, config_step_dag)?;
 
         // generate all the VarSteps using the ConfigStep + ConfigStepAncestry
-        let mut study_varsteps: HashMap<VarStepId, VarStep> = HashMap::new();
-        for (step, ancestry) in std::iter::zip(&study_config.steps, &config_step_ancestries) {
-            let varstep_builder = VarStepBuilder {
-                step,
-                step_ancestry: ancestry,
-            };
-
-            for variation in &design.variations {
-                // filter the BrIds by the ones that are actually in this VarStepAncestry.ancestral_variables
-                let varstep_brids: Vec<BrId> = variation
-                    .branch_ids
-                    .iter()
-                    .filter(|x| {
-                        ancestry
-                            .ancestral_variables
-                            .contains(&design.branches[x].name)
-                    })
-                    .copied()
-                    .collect();
-                let varstep_branches: Vec<&VariableBranch> =
-                    varstep_brids.iter().map(|x| &design.branches[x]).collect();
-
-                let varstep = varstep_builder.build_realized_varstep(varstep_branches)?;
-
-                // get the dependencies as well
-
-                study_varsteps.insert(varstep.uid.clone(), varstep);
-            }
-        }
+        let study_varsteps =
+            Self::generate_varsteps(&study_config, &config_step_ancestries_map, &design)?;
 
         // get the varstep dependencies using the dag + generating the VarStepId
-        let mut varstep_dependencies: HashMap<VarStepId, Vec<VarStepId>> = HashMap::new();
-        for (vsid, varstep) in &study_varsteps {
-            let mut dependent_vsids: Vec<VarStepId> = Vec::new();
-            let varstep_branches = varstep
-                .branch_dependencies
-                .iter()
-                .map(|x| &design.branches[x])
-                .collect::<Vec<_>>();
+        let varstep_dependencies = Self::generate_varstep_dependencies(
+            &study_varsteps,
+            &design,
+            &config_step_ancestries_map,
+        )?;
 
-            for dependent_step in &config_step_ancestries_map[&varstep.name].parents {
-                let dependent_step_ancestry = config_step_ancestries_map[&dependent_step];
-                let dependent_step_uid =
-                    Self::get_step_uid(dependent_step_ancestry, varstep_branches.clone())?;
-                dependent_vsids.push(dependent_step_uid);
-            }
-            varstep_dependencies.insert(*vsid, dependent_vsids);
-        }
-
-        // Using the VarStepsContext create the varstep_dag
-        let mut vs_dag_builder: DagBuilder<VarStepId> = DagBuilder::new();
-        for (uid, _) in &study_varsteps {
-            let dependent_vsids = &varstep_dependencies[uid];
-            vs_dag_builder.add_node(uid.clone(), dependent_vsids.clone())?;
-        }
-        let vs_dag = vs_dag_builder.into_dag()?;
+        // Build the varstep_dag
+        let vs_dag = Self::build_varstep_dag(&study_varsteps, varstep_dependencies)?;
 
         // Copy/Move everything into the StudyPlan
         Ok(StudyPlan {
@@ -140,27 +86,98 @@ impl StudyPlanBuilder {
         })
     }
 
-    /// Function that returns the Uid of the potential VarStep based on the ConfigStep name + the branches associated with the step.
-    /// Note that there is *no* check if there are multiple branches that could be part of the Step -- only the first one encountered
-    /// is returned.
-    fn get_step_uid(
-        step_ancestry: &ConfigStepAncestry,
-        step_filtered_branches: Vec<&VariableBranch>,
-    ) -> Result<VarStepId, StudyPlanBuildError> {
-        let name = &step_ancestry.name;
-
-        let mut brids: Vec<BrId> = Vec::with_capacity(step_ancestry.ancestral_variables.len());
-        for varname in &step_ancestry.variables {
-            let b = step_filtered_branches
-                .iter()
-                .find(|x| x.name == *varname)
-                .ok_or_else(|| {
-                    StudyPlanBuildError::VarStepDependencyMissingBranch(varname.clone())
-                })?;
-            brids.push(b.uid);
+    fn build_step_dag(
+        study_config: &StudyConfiguration,
+    ) -> Result<Dag<ConfigStepName>, StudyPlanBuildError> {
+        let mut dag_builder = DagBuilder::<ConfigStepName>::new();
+        // build the dependency tree --> each Step needs to know what Branches it depends on (even upstream)
+        for step in &study_config.steps {
+            dag_builder.add_node(step.name.clone(), step.get_dependent_steps())?;
         }
 
-        Ok(VarStepId::from_step_branches(name, brids)?)
+        let config_step_dag = dag_builder.into_dag()?;
+        Ok(config_step_dag)
+    }
+
+    fn build_varstep_dag(
+        study_varsteps: &HashMap<VarStepId, VarStep>,
+        varstep_dependencies: HashMap<VarStepId, Vec<VarStepId>>,
+    ) -> Result<Dag<VarStepId>, StudyPlanBuildError> {
+        let mut vs_dag_builder: DagBuilder<VarStepId> = DagBuilder::new();
+        for (uid, _) in study_varsteps {
+            let dependent_vsids = &varstep_dependencies[uid];
+            vs_dag_builder.add_node(uid.clone(), dependent_vsids.clone())?;
+        }
+        let vs_dag = vs_dag_builder.into_dag()?;
+        Ok(vs_dag)
+    }
+
+    fn generate_step_ancestries(
+        study_config: &StudyConfiguration,
+        steps_map: HashMap<ConfigStepName, &ConfigStep>,
+        config_step_dag: Dag<ConfigStepName>,
+    ) -> Result<HashMap<ConfigStepName, ConfigStepAncestry>, StudyPlanBuildError> {
+        // generate the ancestry
+        let mut config_step_ancestries_map: HashMap<ConfigStepName, ConfigStepAncestry> =
+            HashMap::new();
+        for step in &study_config.steps {
+            let ancestry = Self::create_config_step_ancestry(step, &steps_map, &config_step_dag)?;
+            config_step_ancestries_map.insert(ancestry.name.clone(), ancestry);
+        }
+        Ok(config_step_ancestries_map)
+    }
+
+    fn generate_varsteps(
+        study_config: &StudyConfiguration,
+        config_step_ancestries_map: &HashMap<ConfigStepName, ConfigStepAncestry>,
+        design: &StudyDesign,
+    ) -> Result<HashMap<VarStepId, VarStep>, StudyPlanBuildError> {
+        let mut study_varsteps: HashMap<VarStepId, VarStep> = HashMap::new();
+        for step in &study_config.steps {
+            let ancestry = &config_step_ancestries_map[&step.name];
+
+            let varstep_builder = VarStepBuilder { step };
+
+            for variation in &design.variations {
+                // loop through the related variables, get the associated branch with each one
+                let variation_branches: HashSet<&VariableBranch> = variation
+                    .branch_ids
+                    .iter()
+                    .map(|x| &design.branches[x])
+                    .collect::<HashSet<&VariableBranch>>();
+
+                let mut varstep_branches: Vec<&VariableBranch> =
+                    Vec::with_capacity(ancestry.get_related_variables().len());
+                for variable_name in &ancestry.get_related_variables() {
+                    let branch = variation_branches
+                        .iter()
+                        .find(|x| x.name == *variable_name)
+                        .ok_or_else(|| {
+                            StudyPlanBuildError::VarStepVariableMissing(variable_name.clone())
+                        })?;
+                    varstep_branches.push(branch);
+                }
+
+                let varstep = varstep_builder.build_realized_varstep(varstep_branches)?;
+
+                study_varsteps.insert(varstep.uid.clone(), varstep);
+            }
+        }
+        Ok(study_varsteps)
+    }
+
+    fn generate_varstep_dependencies(
+        study_varsteps: &HashMap<VarStepId, VarStep>,
+        design: &StudyDesign,
+        config_step_ancestries_map: &HashMap<ConfigStepName, ConfigStepAncestry>,
+    ) -> Result<HashMap<VarStepId, Vec<VarStepId>>, StudyPlanBuildError> {
+        let mut varstep_dependencies: HashMap<VarStepId, Vec<VarStepId>> = HashMap::new();
+        for (vsid, varstep) in study_varsteps {
+            let dependent_vsids =
+                get_varstep_dependencies(varstep, &config_step_ancestries_map, &design.branches)?;
+            varstep_dependencies.insert(*vsid, dependent_vsids);
+        }
+        Ok(varstep_dependencies)
     }
 
     fn create_config_step_ancestry(
@@ -169,16 +186,18 @@ impl StudyPlanBuilder {
         dag: &Dag<ConfigStepName>,
     ) -> Result<ConfigStepAncestry, StudyPlanBuildError> {
         let name = step.name.clone();
-        let parents = step.get_referenced_steps().clone();
+        let parents = step.get_dependent_steps().clone();
         let variables = step.get_referenced_variables().clone();
 
         let mut ancestral_parents: HashSet<ConfigStepName> = HashSet::new();
         let mut ancestral_variables: HashSet<VariableName> = HashSet::new();
 
-        for parent_name in dag.parents(&name)? {
+        for parent_name in dag.collect_ancestors(&name)? {
             let parent_node = steps
-                .get(parent_name)
+                .get(&parent_name)
                 .ok_or_else(|| StudyPlanBuildError::AncestryBuildKeyError(parent_name.clone()))?;
+
+            dbg!(&dag);
 
             ancestral_parents.extend(parent_node.get_referenced_steps());
             ancestral_variables.extend(parent_node.get_referenced_variables());
@@ -194,7 +213,92 @@ impl StudyPlanBuilder {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum VarStepDependencyBuildError {
+    #[error(
+        "Unable to retrieve ancestry for {}, while building varstep dependencies for {}",
+        config_step_name,
+        varstep_uid
+    )]
+    StepAncestryRetrievalError {
+        config_step_name: ConfigStepName,
+        varstep_uid: VarStepId,
+    },
+
+    #[error(transparent)]
+    UidError(#[from] UidError),
+
+    #[error("Resolution of the VarStep did not happen cleanly")]
+    ResolveUidError,
+}
+
+/// Given a VarStep, the full ancestries map, and full branch map, determines and returns all the dependent VarStepIds
+fn get_varstep_dependencies(
+    varstep: &VarStep,
+    step_ancestries: &HashMap<ConfigStepName, ConfigStepAncestry>,
+    branch_map: &HashMap<BrId, VariableBranch>,
+) -> Result<Vec<VarStepId>, VarStepDependencyBuildError> {
+    let step_name = &varstep.name;
+    let dependent_step_names = &step_ancestries
+        .get(step_name)
+        .ok_or_else(|| VarStepDependencyBuildError::StepAncestryRetrievalError {
+            config_step_name: step_name.clone(),
+            varstep_uid: varstep.uid.clone(),
+        })?
+        .parents;
+
+    let mut branches: Vec<&VariableBranch> = Vec::with_capacity(varstep.branch_dependencies.len());
+    for brid in &varstep.branch_dependencies {
+        branches.push(&branch_map[&brid]);
+    }
+    dbg!(&branches);
+    // resolve the dependent step names into their uid --> need to know their dependent branches
+    let mut dependent_varstep_uids: Vec<VarStepId> = Vec::with_capacity(dependent_step_names.len());
+    for dependent_step_name in dependent_step_names {
+        let dependent_step_ancestry =
+            step_ancestries.get(dependent_step_name).ok_or_else(|| {
+                VarStepDependencyBuildError::StepAncestryRetrievalError {
+                    config_step_name: step_name.clone(),
+                    varstep_uid: varstep.uid.clone(),
+                }
+            })?;
+        dbg!(&dependent_step_name);
+        dbg!(&branches);
+        let dependent_step_uid = resolve_uid(dependent_step_ancestry, branches.clone())?;
+        dependent_varstep_uids.push(dependent_step_uid);
+    }
+
+    Ok(dependent_varstep_uids)
+}
+
+/// uses the step_name + the ancestral_variables to filter the branches and build a varstep_uid. This should be filtered
+/// in that there are no "duplicate" variables
+fn resolve_uid(
+    ancestry: &ConfigStepAncestry,
+    branches: Vec<&VariableBranch>,
+) -> Result<VarStepId, VarStepDependencyBuildError> {
+    let step_name = &ancestry.name;
+
+    let related_variables = ancestry.get_related_variables();
+
+    let mut brids: HashSet<BrId> = HashSet::with_capacity(related_variables.len());
+    for b in branches {
+        if related_variables.contains(&b.name) {
+            brids.insert(b.uid);
+        }
+    }
+
+    let brids_vec: Vec<BrId> = brids.iter().cloned().collect();
+
+    match brids.len() == related_variables.len() {
+        true => Ok(VarStepId::from_step_branches(step_name, brids_vec)?),
+        false => Err(VarStepDependencyBuildError::ResolveUidError),
+    }
+}
+
 /// Holds information regarding ancestry of ConfigStep (upstream VariableNames, and ConfigStepNames)
+/// ancestral means not including this step. Use function get_related_[steps/variables] if you want both
+/// step + ancestors
 #[derive(Debug)]
 pub struct ConfigStepAncestry {
     name: ConfigStepName,
@@ -202,6 +306,20 @@ pub struct ConfigStepAncestry {
     ancestral_parents: HashSet<ConfigStepName>,
     variables: HashSet<VariableName>,
     ancestral_variables: HashSet<VariableName>,
+}
+
+impl ConfigStepAncestry {
+    pub fn get_related_parents(&self) -> HashSet<ConfigStepName> {
+        let related_parents =
+            HashSet::from_iter(self.parents.union(&self.ancestral_parents).cloned());
+        related_parents
+    }
+
+    pub fn get_related_variables(&self) -> HashSet<VariableName> {
+        let related_variables =
+            HashSet::from_iter(self.variables.union(&self.ancestral_variables).cloned());
+        related_variables
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -214,9 +332,9 @@ pub enum VarStepBuildError {
 }
 
 /// Helper struct that builds VarSteps based on ConfigStep information
+#[derive(Debug)]
 struct VarStepBuilder<'a> {
     step: &'a ConfigStep,
-    step_ancestry: &'a ConfigStepAncestry,
 }
 
 impl VarStepBuilder<'_> {
@@ -259,4 +377,292 @@ impl VarStepBuilder<'_> {
 
         Ok(varstep)
     }
+}
+
+#[cfg(test)]
+mod test {
+
+    // what to test here:
+    // Note: Dag is tested already in DAG
+    //
+    // 1. Proper varstep building
+    // 2. Stable hashids during build process
+    // 3. Dependency structure is correctly linked using varstep uid
+    // 4. Proper ancestry construction (do i need it still?)
+
+    use std::{fs::File, path::PathBuf};
+
+    use crate::study::{configreader::ConfigReader, design::StudyDesignBuilder};
+
+    use super::*;
+
+    fn build_study_configuration() -> StudyConfiguration {
+        let mut f = File::open(PathBuf::from("tests/fixtures/config.toml")).unwrap();
+        ConfigReader::build_from_reader(&mut f).unwrap()
+    }
+
+    fn get_steps_map(study_config: &StudyConfiguration) -> HashMap<ConfigStepName, &ConfigStep> {
+        let mut steps_map: HashMap<ConfigStepName, &ConfigStep> =
+            HashMap::with_capacity(study_config.steps.len());
+        for s in &study_config.steps {
+            steps_map.insert(s.name.clone(), s);
+        }
+        steps_map
+    }
+
+    fn build_study_design() -> StudyDesign {
+        let f = File::open(PathBuf::from("tests/fixtures/design.csv")).unwrap();
+        let variables = vec!["sleep_time", "solve_time"];
+        StudyDesignBuilder { variables }
+            .build_from_reader(f)
+            .unwrap()
+    }
+
+    /// typical cases
+    #[test]
+    fn test_build_study_plan() {
+        let study_config = build_study_configuration();
+        let study_design = build_study_design();
+        let study_plan = StudyPlanBuilder::build_study_plan(study_config, study_design);
+        assert!(study_plan.is_ok());
+    }
+
+    #[test]
+    fn test_build_step_dag() {
+        let study_config = build_study_configuration();
+        let step_dag = StudyPlanBuilder::build_step_dag(&study_config);
+        assert!(step_dag.is_ok());
+        let dag = step_dag.unwrap();
+    }
+
+    #[test]
+    fn test_build_ancestry() {
+        let study_config = build_study_configuration();
+        let steps_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+
+        let config_step_1 = &study_config.steps[0];
+        let steps_map = get_steps_map(&study_config);
+
+        let ancestry =
+            StudyPlanBuilder::create_config_step_ancestry(config_step_1, &steps_map, &steps_dag);
+        assert!(ancestry.is_ok());
+        assert_eq!(ancestry.unwrap().name, ConfigStepName::from("preprocess"));
+    }
+
+    #[test]
+    fn test_build_ancestry_multiple_dependecies() {
+        let study_config = build_study_configuration();
+        let steps_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+
+        let config_step_postprocess = &study_config.steps[2];
+        let steps_map = get_steps_map(&study_config);
+
+        let ancestry = StudyPlanBuilder::create_config_step_ancestry(
+            config_step_postprocess,
+            &steps_map,
+            &steps_dag,
+        );
+
+        assert!(ancestry.is_ok());
+        let ancestry = ancestry.unwrap();
+        assert_eq!(ancestry.name, ConfigStepName::from("postprocess"));
+        let expected_variable_dependencies = vec![
+            VariableName::new("sleep_time"),
+            VariableName::new("solve_time"),
+        ];
+        let expected_variable_dependencies: HashSet<VariableName> =
+            HashSet::from_iter(expected_variable_dependencies.iter().cloned());
+        assert_eq!(
+            ancestry.get_related_variables(),
+            expected_variable_dependencies
+        )
+    }
+
+    #[test]
+    fn test_generate_step_ancestries() {
+        let study_config = build_study_configuration();
+        let config_step_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+        let steps_map = get_steps_map(&study_config);
+
+        let ancestries =
+            StudyPlanBuilder::generate_step_ancestries(&study_config, steps_map, config_step_dag);
+        assert!(ancestries.is_ok());
+    }
+
+    #[test]
+    fn test_varstep_build() {
+        let study_config = build_study_configuration();
+        let study_design = build_study_design();
+        let config_step = &study_config.steps[0];
+
+        let variation = &study_design.variations[0];
+        let variation_branches = variation
+            .branch_ids
+            .iter()
+            .map(|x| &study_design.branches[x])
+            .collect::<Vec<&VariableBranch>>();
+
+        let varstep_builder = VarStepBuilder { step: config_step };
+        let varstep = varstep_builder.build_realized_varstep(variation_branches);
+
+        assert!(varstep.is_ok());
+    }
+
+    #[test]
+    fn test_generate_varsteps() {
+        let study_config = build_study_configuration();
+        let study_design = build_study_design();
+        let config_step_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+        let steps_map = get_steps_map(&study_config);
+
+        let config_step_ancestries_map =
+            StudyPlanBuilder::generate_step_ancestries(&study_config, steps_map, config_step_dag)
+                .unwrap();
+
+        let varsteps = StudyPlanBuilder::generate_varsteps(
+            &study_config,
+            &config_step_ancestries_map,
+            &study_design,
+        );
+
+        dbg!(&varsteps);
+
+        assert!(varsteps.is_ok());
+        assert_eq!(varsteps.unwrap().len(), 6)
+    }
+
+    #[test]
+    fn test_get_varstep_dependencies() {
+        let study_config = build_study_configuration();
+        let study_design = build_study_design();
+        let config_step_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+        let steps_map = get_steps_map(&study_config);
+
+        let config_step_ancestries_map =
+            StudyPlanBuilder::generate_step_ancestries(&study_config, steps_map, config_step_dag)
+                .unwrap();
+
+        let varsteps = StudyPlanBuilder::generate_varsteps(
+            &study_config,
+            &config_step_ancestries_map,
+            &study_design,
+        )
+        .unwrap();
+
+        let dependencies = StudyPlanBuilder::generate_varstep_dependencies(
+            &varsteps,
+            &study_design,
+            &config_step_ancestries_map,
+        );
+
+        dbg!(&dependencies);
+        assert!(dependencies.is_ok())
+    }
+
+    #[test]
+    fn test_build_varstep_dag() {
+        let study_config = build_study_configuration();
+        let study_design = build_study_design();
+        let config_step_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+        let steps_map = get_steps_map(&study_config);
+
+        let config_step_ancestries_map =
+            StudyPlanBuilder::generate_step_ancestries(&study_config, steps_map, config_step_dag)
+                .unwrap();
+
+        let study_varsteps = StudyPlanBuilder::generate_varsteps(
+            &study_config,
+            &config_step_ancestries_map,
+            &study_design,
+        )
+        .unwrap();
+
+        // get the varstep dependencies using the dag + generating the VarStepId
+        let varstep_dependencies = StudyPlanBuilder::generate_varstep_dependencies(
+            &study_varsteps,
+            &study_design,
+            &config_step_ancestries_map,
+        )
+        .unwrap();
+
+        let vs_dag = StudyPlanBuilder::build_varstep_dag(&study_varsteps, varstep_dependencies);
+
+        assert!(vs_dag.is_ok())
+    }
+
+    #[test]
+    fn test_generate_varstep_ancestries() {
+        let study_config = build_study_configuration();
+        let study_design = build_study_design();
+        let config_step_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+        let steps_map = get_steps_map(&study_config);
+
+        let config_step_ancestries_map =
+            StudyPlanBuilder::generate_step_ancestries(&study_config, steps_map, config_step_dag)
+                .unwrap();
+
+        let study_varsteps = StudyPlanBuilder::generate_varsteps(
+            &study_config,
+            &config_step_ancestries_map,
+            &study_design,
+        )
+        .unwrap();
+
+        // get the varstep dependencies using the dag + generating the VarStepId
+        let varstep_dependencies = StudyPlanBuilder::generate_varstep_dependencies(
+            &study_varsteps,
+            &study_design,
+            &config_step_ancestries_map,
+        );
+
+        assert!(varstep_dependencies.is_ok())
+    }
+
+    #[test]
+    fn test_resolve_uid() {
+        let study_config = build_study_configuration();
+        let steps_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+        let study_design = build_study_design();
+
+        let config_step = &study_config.steps[0];
+        let steps_map = get_steps_map(&study_config);
+        let variation = &study_design.variations[0];
+
+        let variation_branches = variation
+            .branch_ids
+            .iter()
+            .map(|x| &study_design.branches[x])
+            .collect::<Vec<&VariableBranch>>();
+
+        let ancestry =
+            StudyPlanBuilder::create_config_step_ancestry(config_step, &steps_map, &steps_dag)
+                .unwrap();
+
+        let uid = resolve_uid(&ancestry, variation_branches);
+        assert!(uid.is_ok())
+    }
+
+    // Error cases
+    #[test]
+    fn test_resolve_uid_duplicate_branches() {
+        let study_config = build_study_configuration();
+        let steps_dag = StudyPlanBuilder::build_step_dag(&study_config).unwrap();
+
+        let config_step = &study_config.steps[0];
+        let steps_map = get_steps_map(&study_config);
+
+        let branches = vec![
+            VariableBranch::new(VariableName::new("sleep_time"), VariableValue::new("10")).unwrap(),
+            VariableBranch::new(VariableName::new("solve_time"), VariableValue::new("A")).unwrap(),
+            VariableBranch::new(VariableName::new("sleep_time"), VariableValue::new("20")).unwrap(),
+        ];
+
+        let ancestry =
+            StudyPlanBuilder::create_config_step_ancestry(config_step, &steps_map, &steps_dag)
+                .unwrap();
+
+        let uid = resolve_uid(&ancestry, branches.iter().collect());
+        assert!(uid.is_err());
+    }
+
 }

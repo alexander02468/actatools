@@ -1,0 +1,32 @@
+
+study_name = "Example"
+design_file = "./design.csv"
+run_dir = "./runs"
+evidence_dir = "./evidence"
+shared_dir = "./shared"
+shared = [
+"scripts/run_preprocess.sh",
+"solver_settings.json",
+"scripts/postprocess.sh",
+]
+
+[[steps]]
+    name = "preprocess"
+    run_exe = "/bin/bash"
+    run_args = ["{shared}/scripts/preprocess.sh",
+                "{variables.sleep_time}",        
+                "{steps.self}/subject.mesh"]
+
+[[steps]]
+    name = "solver"
+    run_exe = "/bin/bash"
+    run_args = ["{shared}/scripts/solve.sh",
+                "{variables.solve_time}",        
+                "{steps.preprocess}/subject.mesh"]
+
+
+[[steps]]
+    name = "postprocess"
+    run_exe = "/bin/bash"
+    run_args = ["{shared}/scripts/postprocess.sh",
+                "{steps.solver}/subject.mesh"]

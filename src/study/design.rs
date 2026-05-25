@@ -41,7 +41,6 @@ pub enum StudyDesignBuildError {
 #[derive(Debug)]
 pub struct StudyDesign {
     pub branches: HashMap<BrId, VariableBranch>,
-    pub by_variable_name: HashMap<VariableName, Vec<BrId>>,
     pub variations: Vec<Variation>,
 }
 
@@ -112,7 +111,7 @@ pub enum BranchError {
     UidError(#[from] UidError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct VariableBranch {
     pub uid: BrId,
     pub name: VariableName,
@@ -177,7 +176,7 @@ impl std::fmt::Display for VariableValue {
 
 /// Helper struct to build the StudyDesign and check against StudyConfiguration for correctness
 pub struct StudyDesignBuilder<'a> {
-    variables: Vec<&'a str>,
+    pub variables: Vec<&'a str>,
 }
 impl<'a> StudyDesignBuilder<'a> {
     /// Builds a StudyDesign using a Reader
@@ -230,7 +229,6 @@ impl<'a> StudyDesignBuilder<'a> {
 
         Ok(StudyDesign {
             branches,
-            by_variable_name,
             variations,
         })
     }

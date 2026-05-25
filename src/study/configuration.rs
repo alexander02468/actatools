@@ -120,6 +120,14 @@ impl ConfigStep {
         referenced_steps
     }
 
+    /// Gets the referenced steps minus the own step (as it is not dependent on it)
+    pub fn get_dependent_steps(&self) -> HashSet<ConfigStepName> {
+        let mut referenced_steps = self.get_referenced_steps();
+        referenced_steps.remove(&self.name);
+
+        referenced_steps
+    }
+
     pub fn get_referenced_variables(&self) -> HashSet<VariableName> {
         let mut referenced_variables: HashSet<VariableName> = HashSet::new();
 

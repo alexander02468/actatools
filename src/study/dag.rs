@@ -89,7 +89,7 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
         Ok(*node_idx)
     }
 
-    /// Returns an iterator walking the parents of the node T
+    /// Returns an iterator walking the direct parents of the node T
     pub fn parents(&self, node: &T) -> Result<impl Iterator<Item = &T> + '_, DagError> {
         let node_idx = self.get_by_node(&node)?;
         Ok(self
@@ -97,6 +97,36 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
             .graph()
             .neighbors_directed(node_idx, Direction::Incoming)
             .filter_map(|idx| self.dag.graph().node_weight(idx)))
+    }
+
+    pub fn collect_ancestors(&self, name: &T) -> Result<HashSet<T>, DagError> {
+        let node_index = self.get_by_node(name)?;
+        let mut ancestors = HashSet::new();
+        Self::collect_ancestors_inner(&self.dag, node_index, &mut ancestors);
+
+        let ancestor_names = ancestors
+            .iter()
+            .map(|n| self.dag.graph().node_weight(*n))
+            .collect::<Option<HashSet<&T>>>();
+        let ancestor_names: HashSet<T> = ancestor_names
+            .ok_or_else(|| DagError::MissingTInGraph)?
+            .into_iter()
+            .cloned()
+            .collect();
+
+        Ok(ancestor_names)
+    }
+
+    fn collect_ancestors_inner<N, E>(
+        dag: &daggy::Dag<N, E>,
+        node: NodeIndex,
+        ancestors: &mut HashSet<NodeIndex>,
+    ) {
+        for parent in dag.graph().neighbors_directed(node, Direction::Incoming) {
+            if ancestors.insert(parent) {
+                Self::collect_ancestors_inner(dag, parent, ancestors);
+            }
+        }
     }
 
     /// Returns an iterator walking the chilren of node T
@@ -326,5 +356,50 @@ mod tests {
 
         let children = sorted_strings(dag.children(&"child".to_string()).unwrap());
         assert!(children.is_empty());
+    }
+
+    fn sorted_indices_as_strings(dag: &Dag<String>, indices: HashSet<NodeIndex>) -> Vec<String> {
+        let mut values: Vec<String> = indices
+            .into_iter()
+            .map(|idx| dag.dag.graph().node_weight(idx).unwrap().clone())
+            .collect();
+
+        values.sort();
+        values
+    }
+
+    #[test]
+    fn build_from_nodes_allows_missing_dependency_entry_for_node() {
+        let nodes = vec!["a".to_string(), "b".to_string()];
+
+        let mut dependencies = HashMap::new();
+        dependencies.insert("b".to_string(), set(&["a"]));
+
+        let dag = Dag::build_from_nodes(nodes, dependencies).unwrap();
+
+        let parents = sorted_strings(dag.parents(&"b".to_string()).unwrap());
+        assert_eq!(parents, vec!["a"]);
+
+        let a_parents = sorted_strings(dag.parents(&"a".to_string()).unwrap());
+        assert!(a_parents.is_empty());
+    }
+
+    #[test]
+    fn children_returns_only_direct_children_not_all_descendants() {
+        let mut builder = DagBuilder::new();
+
+        builder.add_node("root".to_string(), []).unwrap();
+        builder
+            .add_node("middle".to_string(), ["root".to_string()])
+            .unwrap();
+        builder
+            .add_node("leaf".to_string(), ["middle".to_string()])
+            .unwrap();
+
+        let dag = builder.into_dag().unwrap();
+
+        let children = sorted_strings(dag.children(&"root".to_string()).unwrap());
+
+        assert_eq!(children, vec!["middle"]);
     }
 }

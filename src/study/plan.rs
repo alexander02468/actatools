@@ -11,7 +11,7 @@ use crate::{
         configuration::{ConfigStep, ConfigStepName, StudySettings},
         dag::Dag,
         design::{BrId, Variation},
-        executionplan::{ExecutionStep, StudyExecutionPlan},
+        executionplan::{ExeStep, StudyExecutionPlan},
         templatedstring::VarStepTemplatedString,
     },
     uid::{Uid, UidError, UidPrefix},
@@ -41,8 +41,11 @@ pub struct VarStep {
     pub branch_dependencies: Vec<BrId>,
 }
 
+#[derive(Debug)]
+enum ExeStepBuildError {}
+
 impl VarStep {
-    pub fn into_execution_step(self) -> ExecutionStep {
+    pub fn try_into_execution_step(self) -> Result<ExeStep, ExeStepBuildError> {
         todo!()
     }
 }

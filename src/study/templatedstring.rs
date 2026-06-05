@@ -4,7 +4,10 @@
 use std::collections::HashMap;
 use thiserror;
 
-use crate::study::design::{VariableName, VariableValue};
+use crate::{
+    paths::FilePath,
+    study::design::{VariableName, VariableValue},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StringParseError {
@@ -192,7 +195,7 @@ pub struct TemplatedString {
 }
 
 impl TemplatedString {
-    pub fn into_varstep_templated_string(
+    pub fn try_into_varstep_templated_string(
         self,
         variable_values: &HashMap<&VariableName, &VariableValue>,
     ) -> Result<VarStepTemplatedString, TemplatedStringError> {
@@ -245,6 +248,16 @@ pub enum VarStepTemplatedStringPart {
         varvalue: VariableValue,
     },
 }
+
+impl VarStepTemplatedStringPart {
+    fn try_into_string(
+        self,
+        &context_map: HashMap<VarStepTemplatedStringPart, String>,
+    ) -> Result<String, VarStepTemplatedStringError> {
+        todo!()
+    }
+}
+
 impl std::fmt::Display for VarStepTemplatedStringPart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
@@ -258,11 +271,25 @@ impl std::fmt::Display for VarStepTemplatedStringPart {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+enum VarStepTemplatedStringError {}
+
 /// Templated String in the VarStep with all variables realized (so not Variable template exists)
 #[derive(Debug, Clone)]
 pub struct VarStepTemplatedString {
     parts: Vec<VarStepTemplatedStringPart>,
 }
+
+impl VarStepTemplatedString {
+    pub fn try_into_arg(self) -> Result<ArgString, VarStepTemplatedStringError> {}
+}
+
+/// Realized String that will be used as an argument. Comes from a TemplatedString
+#[derive(Debug)]
+pub struct ArgString(String);
+
+#[derive(Debug)]
+pub struct ExePath(FilePath);
 
 /// unit test cases for ParsedString, ParsedPart
 #[cfg(test)]

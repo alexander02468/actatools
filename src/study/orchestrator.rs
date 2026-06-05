@@ -1,9 +1,13 @@
 // Copyright (C) 2026 Alexander Baker
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use crate::study::executionplan::StudyExecutionPlan;
+use std::collections::HashMap;
 
-pub struct StudyOrchestrator;
+use crate::study::{executionplan::StudyExecutionPlan, plan::VarStepId, runner::Runner};
+
+pub struct StudyOrchestrator {
+    runners: HashMap<VarStepId, Runner>,
+}
 
 impl StudyOrchestrator {
     pub fn new(study_execution_plan: &StudyExecutionPlan) -> Self {

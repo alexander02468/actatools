@@ -3,7 +3,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    env::var,
 };
 
 use crate::{
@@ -197,8 +196,6 @@ impl StudyPlanBuilder {
                 .get(&parent_name)
                 .ok_or_else(|| StudyPlanBuildError::AncestryBuildKeyError(parent_name.clone()))?;
 
-            dbg!(&dag);
-
             ancestral_parents.extend(parent_node.get_referenced_steps());
             ancestral_variables.extend(parent_node.get_referenced_variables());
         }
@@ -251,7 +248,6 @@ fn get_varstep_dependencies(
     for brid in &varstep.branch_dependencies {
         branches.push(&branch_map[&brid]);
     }
-    dbg!(&branches);
     // resolve the dependent step names into their uid --> need to know their dependent branches
     let mut dependent_varstep_uids: Vec<VarStepId> = Vec::with_capacity(dependent_step_names.len());
     for dependent_step_name in dependent_step_names {
@@ -262,8 +258,7 @@ fn get_varstep_dependencies(
                     varstep_uid: varstep.uid.clone(),
                 }
             })?;
-        dbg!(&dependent_step_name);
-        dbg!(&branches);
+
         let dependent_step_uid = resolve_uid(dependent_step_ancestry, branches.clone())?;
         dependent_varstep_uids.push(dependent_step_uid);
     }
@@ -356,13 +351,13 @@ impl VarStepBuilder<'_> {
             .step
             .run_exe
             .clone()
-            .into_varstep_templated_string(&branch_map)?;
+            .try_into_varstep_templated_string(&branch_map)?;
         let run_args = self
             .step
             .run_args
             .clone()
             .iter()
-            .map(|x| x.clone().into_varstep_templated_string(&branch_map))
+            .map(|x| x.clone().try_into_varstep_templated_string(&branch_map))
             .collect::<Result<Vec<_>, TemplatedStringError>>()?;
 
         let name = self.step.name.clone();
@@ -432,7 +427,6 @@ mod test {
         let study_config = build_study_configuration();
         let step_dag = StudyPlanBuilder::build_step_dag(&study_config);
         assert!(step_dag.is_ok());
-        let dag = step_dag.unwrap();
     }
 
     #[test]
@@ -525,8 +519,6 @@ mod test {
             &study_design,
         );
 
-        dbg!(&varsteps);
-
         assert!(varsteps.is_ok());
         assert_eq!(varsteps.unwrap().len(), 6)
     }
@@ -555,7 +547,6 @@ mod test {
             &config_step_ancestries_map,
         );
 
-        dbg!(&dependencies);
         assert!(dependencies.is_ok())
     }
 
@@ -664,5 +655,4 @@ mod test {
         let uid = resolve_uid(&ancestry, branches.iter().collect());
         assert!(uid.is_err());
     }
-
 }

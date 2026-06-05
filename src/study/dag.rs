@@ -358,16 +358,6 @@ mod tests {
         assert!(children.is_empty());
     }
 
-    fn sorted_indices_as_strings(dag: &Dag<String>, indices: HashSet<NodeIndex>) -> Vec<String> {
-        let mut values: Vec<String> = indices
-            .into_iter()
-            .map(|idx| dag.dag.graph().node_weight(idx).unwrap().clone())
-            .collect();
-
-        values.sort();
-        values
-    }
-
     #[test]
     fn build_from_nodes_allows_missing_dependency_entry_for_node() {
         let nodes = vec!["a".to_string(), "b".to_string()];

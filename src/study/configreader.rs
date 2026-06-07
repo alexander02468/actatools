@@ -86,7 +86,7 @@ impl RawStudyConfig {
 
         let shared = parsed_shared
             .into_iter()
-            .map(|x| x.into_templated_string_with_context(""))
+            .map(|x| x.into_templated_string_with_context(&ConfigStepName::from("")))
             .collect();
 
         let settings = StudySettings {
@@ -124,12 +124,13 @@ impl RawConfigStep {
 
         let run_args = run_args_parsed
             .into_iter()
-            .map(|x| x.into_templated_string_with_context(&self.name))
+            .map(|x| x.into_templated_string_with_context(&ConfigStepName::from(&self.name)))
             .collect::<Vec<TemplatedString>>();
 
         // now the exe
         let run_exe_raw = ParsedString::from_string(&self.run_exe)?;
-        let run_exe = run_exe_raw.into_templated_string_with_context(&self.name);
+        let run_exe =
+            run_exe_raw.into_templated_string_with_context(&ConfigStepName::from(&self.name));
 
         Ok(ConfigStep {
             name: ConfigStepName::from(&self.name),

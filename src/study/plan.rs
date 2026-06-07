@@ -3,7 +3,7 @@
 
 pub const VARSTEPID_DIGEST_LEN: usize = 8;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, os::raw};
 
 use crate::{
     digest::{Digest, hash_digests_stable},
@@ -17,6 +17,12 @@ use crate::{
     uid::{Uid, UidError, UidPrefix},
 };
 
+#[derive(Debug, thiserror::Error)]
+enum StudyPlanError {
+    #[error(transparent)]
+    ExeStepBuildError(#[from] ExeStepBuildError),
+}
+
 #[derive(Debug)]
 pub struct StudyPlan {
     pub settings: StudySettings,
@@ -27,8 +33,17 @@ pub struct StudyPlan {
 }
 
 impl StudyPlan {
-    pub fn into_execution_plan(self) -> StudyExecutionPlan {
+    pub fn try_into_execution_plan(self) -> Result<StudyExecutionPlan, StudyPlanError> {
+        // Convert the varsteps into ExeSteps
+
+        let exe_steps = self
+            .varsteps
+            .into_iter()
+            .map(|(k, varstep)| varstep.try_into_execution_step().map(|r| (k, r)))
+            .collect::<Result<HashMap<VarStepId, ExeStep>, ExeStepBuildError>>()?;
+
         todo!()
+        // return Ok(StudyExecutionPlan::new())
     }
 }
 
@@ -41,7 +56,7 @@ pub struct VarStep {
     pub branch_dependencies: Vec<BrId>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 enum ExeStepBuildError {}
 
 impl VarStep {

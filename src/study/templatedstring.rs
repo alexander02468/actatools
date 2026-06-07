@@ -1,12 +1,18 @@
 // Copyright (C) 2026 Alexander Baker
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use blake3::Hash;
+use clap::Arg;
 use std::collections::HashMap;
 use thiserror;
 
 use crate::{
-    paths::FilePath,
-    study::design::{VariableName, VariableValue},
+    paths::{Directory, FilePath},
+    study::{
+        configuration::ConfigStepName,
+        design::{VariableName, VariableValue},
+        plan::VarStepId,
+    },
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -145,14 +151,16 @@ impl ParsedString {
     }
 
     /// This function takes in a ParsedString to create the TemplatedString, adding Step context if needed
-    pub fn into_templated_string_with_context(self, step_name: &str) -> TemplatedString {
+    pub fn into_templated_string_with_context(self, step_name: &ConfigStepName) -> TemplatedString {
         let mut parts: Vec<TemplatedStringPart> = Vec::with_capacity(self.parts.len());
         for parsed_part in self.parts {
             let template_part = match parsed_part {
                 ParsedPart::Literal(s) => TemplatedStringPart::Literal(s.clone()),
-                ParsedPart::LocalStep => TemplatedStringPart::Step(String::from(step_name)),
-                ParsedPart::Step(name) => TemplatedStringPart::Step(String::from(name)),
-                ParsedPart::StudyVariable(v) => TemplatedStringPart::StudyVariable(String::from(v)),
+                ParsedPart::LocalStep => TemplatedStringPart::Step(step_name.clone()),
+                ParsedPart::Step(name) => TemplatedStringPart::Step(ConfigStepName::from(name)),
+                ParsedPart::StudyVariable(v) => {
+                    TemplatedStringPart::StudyVariable(VariableName::new(v))
+                }
                 ParsedPart::StudyShared => TemplatedStringPart::StudyShared,
             };
 
@@ -167,9 +175,9 @@ impl ParsedString {
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum TemplatedStringPart {
     Literal(String),
-    Step(String),
+    Step(ConfigStepName),
     StudyShared,
-    StudyVariable(String),
+    StudyVariable(VariableName),
 }
 
 impl std::fmt::Display for TemplatedStringPart {
@@ -197,6 +205,7 @@ pub struct TemplatedString {
 impl TemplatedString {
     pub fn try_into_varstep_templated_string(
         self,
+        varsteps: &HashMap<ConfigStepName, VarStepId>,
         variable_values: &HashMap<&VariableName, &VariableValue>,
     ) -> Result<VarStepTemplatedString, TemplatedStringError> {
         let mut parts: Vec<VarStepTemplatedStringPart> = Vec::with_capacity(self.parts.len());
@@ -205,14 +214,19 @@ impl TemplatedString {
         for part in self.parts {
             let varstep_part = match part {
                 TemplatedStringPart::Literal(s) => VarStepTemplatedStringPart::Literal(s),
-                TemplatedStringPart::Step(name) => VarStepTemplatedStringPart::Step(name),
+                TemplatedStringPart::Step(name) => {
+                    let varstep_name = varsteps
+                        .get(&name)
+                        .ok_or_else(|| TemplatedStringError::MissingContextKey(name.to_string()))?;
+                    VarStepTemplatedStringPart::Varstep(varstep_name.clone())
+                }
                 TemplatedStringPart::StudyVariable(v) => {
-                    let varname = VariableName::new(v.clone());
+                    let varname = v;
                     let varvalue = *variable_values.get(&varname).ok_or_else(|| {
                         TemplatedStringError::MissingContextKey(varname.to_string())
                     })?;
 
-                    VarStepTemplatedStringPart::StudyVariable {
+                    VarStepTemplatedStringPart::Branch {
                         varname,
                         varvalue: varvalue.clone(),
                     }
@@ -238,23 +252,31 @@ impl std::fmt::Display for TemplatedString {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+enum VarStepTemplatedStringError {}
+
 #[derive(Debug, Clone)]
 pub enum VarStepTemplatedStringPart {
     Literal(String),
-    Step(String),
+    Varstep(VarStepId),
     StudyShared,
-    StudyVariable {
+    Branch {
         varname: VariableName,
         varvalue: VariableValue,
     },
 }
 
 impl VarStepTemplatedStringPart {
-    fn try_into_string(
+    fn try_into_arg_string_part(
         self,
-        &context_map: HashMap<VarStepTemplatedStringPart, String>,
-    ) -> Result<String, VarStepTemplatedStringError> {
-        todo!()
+        context_map: &HashMap<VarStepTemplatedStringPart, String>,
+    ) -> Result<ArgStringPart, VarStepTemplatedStringError> {
+        match self {
+            VarStepTemplatedStringPart::Literal(_) => todo!(),
+            VarStepTemplatedStringPart::Varstep(_) => todo!(),
+            VarStepTemplatedStringPart::StudyShared => todo!(),
+            VarStepTemplatedStringPart::Branch { varname, varvalue } => todo!(),
+        }
     }
 }
 
@@ -262,17 +284,14 @@ impl std::fmt::Display for VarStepTemplatedStringPart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             VarStepTemplatedStringPart::Literal(s) => write!(f, "{s}"),
-            VarStepTemplatedStringPart::Step(name) => write!(f, "<steps.{name}.files>"),
+            VarStepTemplatedStringPart::Varstep(name) => write!(f, "<steps.{name}.files>"),
             VarStepTemplatedStringPart::StudyShared => write!(f, "<shared>"),
-            VarStepTemplatedStringPart::StudyVariable { varname, varvalue } => {
+            VarStepTemplatedStringPart::Branch { varname, varvalue } => {
                 write!(f, "<{varname}:{varvalue}>")
             }
         }
     }
 }
-
-#[derive(Debug, thiserror::Error)]
-enum VarStepTemplatedStringError {}
 
 /// Templated String in the VarStep with all variables realized (so not Variable template exists)
 #[derive(Debug, Clone)]
@@ -280,13 +299,66 @@ pub struct VarStepTemplatedString {
     parts: Vec<VarStepTemplatedStringPart>,
 }
 
+/// consumes the VarStepTemplatedString and creates an ArgString, which has all strings realized
 impl VarStepTemplatedString {
-    pub fn try_into_arg(self) -> Result<ArgString, VarStepTemplatedStringError> {}
+    pub fn into_arg_string(self, varstep_dirs: &str, shared_dir: &str) -> ArgString {
+        // loop through the parts, convert if needed to a ArgString(String) or a directory
+        todo!()
+    }
+}
+
+/// Realized String Part that still holds the history of the string (e.g. was it resolved from something)
+#[derive(Debug)]
+enum ArgStringPart {
+    Literal(String),
+    Step {
+        vsid: VarStepId,
+        string: String,
+    },
+    StudyShared(Directory),
+    StudyVariable {
+        varname: VariableName,
+        varvalue: VariableValue,
+        string: String,
+    },
+}
+
+impl ArgStringPart {
+    /// consumes into a string representation
+    fn into_string(self) -> String {
+        match self {
+            ArgStringPart::Literal(s) => s,
+            ArgStringPart::Step { vsid: _, string } => string,
+            ArgStringPart::StudyShared(directory) => directory
+                .as_path()
+                .as_os_str()
+                .to_string_lossy()
+                .to_string(),
+            ArgStringPart::StudyVariable {
+                varname: _,
+                varvalue: _,
+                string,
+            } => string,
+        }
+    }
 }
 
 /// Realized String that will be used as an argument. Comes from a TemplatedString
 #[derive(Debug)]
-pub struct ArgString(String);
+pub struct ArgString {
+    parts: Vec<ArgStringPart>,
+}
+
+impl ArgString {
+    // consumes the ArgString to produce a realized String
+    pub fn into_string(self) -> String {
+        self.parts
+            .into_iter()
+            .map(|x| x.into_string())
+            .collect::<Vec<String>>()
+            .join("")
+    }
+}
 
 #[derive(Debug)]
 pub struct ExePath(FilePath);

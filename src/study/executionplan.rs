@@ -13,24 +13,24 @@ use crate::{
     },
 };
 
+#[derive(Debug, thiserror::Error)]
 enum StudyExecutionPlanError {}
 
 /// Holds the ExecutionSteps that are fully realized steps with all paths realized.
 #[derive(Debug)]
 pub struct StudyExecutionPlan {
-    settings: StudySettings,
-    run_order: Vec<ExeStepId>,
-    execution_steps: HashMap<ExeStepId, ExeStep>,
-    variations: HashMap<VId, Variation>,
-    branches: HashMap<BrId, VariableBranch>,
+    pub settings: StudySettings,
+    pub run_order: Vec<ExeStepId>,
+    pub execution_steps: HashMap<ExeStepId, ExeStep>,
+    pub variations: HashMap<VId, Variation>,
+    pub branches: HashMap<BrId, VariableBranch>,
 }
 
 impl StudyExecutionPlan {
-    pub fn try_from_study_plane(study_plan: StudyPlan) -> Result<Self, StudyExecutionPlanError> {
-        todo!()
-    }
-
-    fn get_run_dir(exe_id: ExeStepId) -> Result<Directory, StudyExecutionPlanError> {
+    fn get_run_dir(
+        exe_id: &ExeStepId,
+        settings: &StudySettings,
+    ) -> Result<Directory, StudyExecutionPlanError> {
         todo!()
     }
 }

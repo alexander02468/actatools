@@ -37,10 +37,6 @@ impl StudyConfiguration {
     pub fn check_step_references(&self) -> StepReferenceCheckResult {
         check_steps(&self.steps)
     }
-
-    pub fn into_study_plan(self) -> study::plan::StudyPlan {
-        todo!()
-    }
 }
 
 /// checks for internal agreement of the steps (are all of the steps that referenced defined in here)
@@ -111,7 +107,7 @@ impl ConfigStep {
             for p in &arg.parts {
                 match p {
                     crate::study::templatedstring::TemplatedStringPart::Step(s) => {
-                        referenced_steps.insert(ConfigStepName::from(s));
+                        referenced_steps.insert(s.clone());
                     }
                     _ => {}
                 }
@@ -135,8 +131,8 @@ impl ConfigStep {
         for arg in &self.run_args {
             for p in &arg.parts {
                 match p {
-                    crate::study::templatedstring::TemplatedStringPart::StudyVariable(s) => {
-                        referenced_variables.insert(VariableName::new(s));
+                    crate::study::templatedstring::TemplatedStringPart::StudyVariable(v) => {
+                        referenced_variables.insert(v.clone());
                     }
                     _ => {}
                 }
@@ -176,14 +172,14 @@ mod test_study_config {
             run_args: vec![
                 ParsedString::from_string("{steps.self}/test.csv")
                     .unwrap()
-                    .into_templated_string_with_context("test1"),
+                    .into_templated_string_with_context(&ConfigStepName::from("test1")),
                 ParsedString::from_string("{steps.test2}/test.csv")
                     .unwrap()
-                    .into_templated_string_with_context("test1"),
+                    .into_templated_string_with_context(&ConfigStepName::from("test1")),
             ],
             run_exe: ParsedString::from_string("test.exe")
                 .unwrap()
-                .into_templated_string_with_context("step_name"),
+                .into_templated_string_with_context(&ConfigStepName::from("step_name")),
         }
     }
 
@@ -194,14 +190,14 @@ mod test_study_config {
             run_args: vec![
                 ParsedString::from_string("{steps.self}/test.csv")
                     .unwrap()
-                    .into_templated_string_with_context("test2"),
+                    .into_templated_string_with_context(&ConfigStepName::from("test2")),
                 ParsedString::from_string("{steps.test1}/test.csv")
                     .unwrap()
-                    .into_templated_string_with_context("test2"),
+                    .into_templated_string_with_context(&ConfigStepName::from("test2")),
             ],
             run_exe: ParsedString::from_string("test.exe")
                 .unwrap()
-                .into_templated_string_with_context("step_name"),
+                .into_templated_string_with_context(&ConfigStepName::from("step_name")),
         }
     }
 
@@ -212,14 +208,14 @@ mod test_study_config {
             run_args: vec![
                 ParsedString::from_string("{steps.test2}/test.csv")
                     .unwrap()
-                    .into_templated_string_with_context("test2"),
+                    .into_templated_string_with_context(&ConfigStepName::from("test2")),
                 ParsedString::from_string("{steps.test1}/test.csv")
                     .unwrap()
-                    .into_templated_string_with_context("test2"),
+                    .into_templated_string_with_context(&ConfigStepName::from("test2")),
             ],
             run_exe: ParsedString::from_string("test.exe")
                 .unwrap()
-                .into_templated_string_with_context("step_name"),
+                .into_templated_string_with_context(&ConfigStepName::from("step_name")),
         }
     }
 

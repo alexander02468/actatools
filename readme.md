@@ -26,8 +26,6 @@ calls underneath, and no docker.
 Study configuration is a TOML file that can be placed at the top of any study. Run statuses are local file-based,
 no general database needs to be installed.
 
-It's not that batteries are included so much as batteries aren't needed.
-
 ### It is flexible
 
 Being lightweight and command-line means it can be wrapped through whatever scripts or tools you usually for your projects. Want to include a manifest of your Python scripts? Just add a `subprocess.run()` call where you want. Using Bash scripts on your HPC? Drop the file onto your home directory and add `~/actarecords record my_file > record.json` at the end. Or if

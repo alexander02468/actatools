@@ -1,13 +1,11 @@
 // Copyright (C) 2026 Alexander Baker
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use blake3::Hash;
-use clap::Arg;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use thiserror;
 
 use crate::{
-    paths::{Directory, FilePath},
+    paths::{Directory, PathError},
     study::{
         configuration::ConfigStepName,
         design::{VariableName, VariableValue},
@@ -91,13 +89,13 @@ impl ParsedString {
             match c {
                 '}' => {
                     // catch the case it was not opened
-                    if opened == false {
+                    if !opened {
                         Err(StringParseError::TemplatedStringClosedWithoutOpen)?
                     }
 
                     // flush everything between the brackets, tag as Variable part
-                    let open_idx_clean = open_idx
-                        .ok_or_else(|| StringParseError::TemplatedStringClosedWithoutOpen)?;
+                    let open_idx_clean =
+                        open_idx.ok_or(StringParseError::TemplatedStringClosedWithoutOpen)?;
                     let part_string = String::from(&text[open_idx_clean + 1..i]);
 
                     parts.push(ParsedPart::from_string_part(&part_string)?);
@@ -218,7 +216,7 @@ impl TemplatedString {
                     let varstep_name = varsteps
                         .get(&name)
                         .ok_or_else(|| TemplatedStringError::MissingContextKey(name.to_string()))?;
-                    VarStepTemplatedStringPart::Varstep(varstep_name.clone())
+                    VarStepTemplatedStringPart::Varstep(*varstep_name)
                 }
                 TemplatedStringPart::StudyVariable(v) => {
                     let varname = v;
@@ -253,7 +251,10 @@ impl std::fmt::Display for TemplatedString {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum VarStepTemplatedStringError {}
+pub enum VarStepTemplatedStringError {
+    #[error("VarStep directory not found in lookup error")]
+    VarstepDirLookupError,
+}
 
 #[derive(Debug, Clone)]
 pub enum VarStepTemplatedStringPart {
@@ -269,13 +270,29 @@ pub enum VarStepTemplatedStringPart {
 impl VarStepTemplatedStringPart {
     fn try_into_arg_string_part(
         self,
-        context_map: &HashMap<VarStepTemplatedStringPart, String>,
+        varstep_dirs: &HashMap<VarStepId, Directory>,
+        shared_dir: &Directory,
     ) -> Result<ArgStringPart, VarStepTemplatedStringError> {
         match self {
-            VarStepTemplatedStringPart::Literal(_) => todo!(),
-            VarStepTemplatedStringPart::Varstep(_) => todo!(),
-            VarStepTemplatedStringPart::StudyShared => todo!(),
-            VarStepTemplatedStringPart::Branch { varname, varvalue } => todo!(),
+            VarStepTemplatedStringPart::Literal(s) => Ok(ArgStringPart::Literal(s)),
+            VarStepTemplatedStringPart::Varstep(vsid) => Ok(ArgStringPart::Step {
+                vsid,
+                dir: varstep_dirs
+                    .get(&vsid)
+                    .ok_or(VarStepTemplatedStringError::VarstepDirLookupError)?
+                    .clone(),
+            }),
+            VarStepTemplatedStringPart::StudyShared => {
+                Ok(ArgStringPart::StudyShared(shared_dir.clone()))
+            }
+            VarStepTemplatedStringPart::Branch { varname, varvalue } => {
+                let string = varvalue.to_string();
+                Ok(ArgStringPart::StudyVariable {
+                    varname,
+                    varvalue,
+                    string,
+                })
+            }
         }
     }
 }
@@ -296,24 +313,33 @@ impl std::fmt::Display for VarStepTemplatedStringPart {
 /// Templated String in the VarStep with all variables realized (so not Variable template exists)
 #[derive(Debug, Clone)]
 pub struct VarStepTemplatedString {
-    parts: Vec<VarStepTemplatedStringPart>,
+    pub parts: Vec<VarStepTemplatedStringPart>,
 }
 
 /// consumes the VarStepTemplatedString and creates an ArgString, which has all strings realized
 impl VarStepTemplatedString {
-    pub fn into_arg_string(self, varstep_dirs: &str, shared_dir: &str) -> ArgString {
-        // loop through the parts, convert if needed to a ArgString(String) or a directory
-        todo!()
+    pub fn try_into_arg_string(
+        self,
+        varstep_dirs: &HashMap<VarStepId, Directory>,
+        shared_dir: &Directory,
+    ) -> Result<ArgString, VarStepTemplatedStringError> {
+        // loop through the parts, convert if needed to a ArgString(String) or a directory location
+        let parts = self
+            .parts
+            .into_iter()
+            .map(|x| x.try_into_arg_string_part(&varstep_dirs, &shared_dir))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ArgString::new(parts))
     }
 }
 
 /// Realized String Part that still holds the history of the string (e.g. was it resolved from something)
 #[derive(Debug)]
-enum ArgStringPart {
+pub enum ArgStringPart {
     Literal(String),
     Step {
         vsid: VarStepId,
-        string: String,
+        dir: Directory,
     },
     StudyShared(Directory),
     StudyVariable {
@@ -328,7 +354,14 @@ impl ArgStringPart {
     fn into_string(self) -> String {
         match self {
             ArgStringPart::Literal(s) => s,
-            ArgStringPart::Step { vsid: _, string } => string,
+            ArgStringPart::Step {
+                vsid: _,
+                dir: directory,
+            } => directory
+                .as_path()
+                .as_os_str()
+                .to_string_lossy()
+                .to_string(),
             ArgStringPart::StudyShared(directory) => directory
                 .as_path()
                 .as_os_str()
@@ -350,6 +383,10 @@ pub struct ArgString {
 }
 
 impl ArgString {
+    pub fn new(parts: Vec<ArgStringPart>) -> Self {
+        Self { parts }
+    }
+
     // consumes the ArgString to produce a realized String
     pub fn into_string(self) -> String {
         self.parts
@@ -360,8 +397,25 @@ impl ArgString {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ExePathError {
+    #[error(transparent)]
+    PathError(#[from] PathError),
+
+    #[error(transparent)]
+    StdIoError(#[from] std::io::Error),
+}
+
+/// holds a realized path that exists
 #[derive(Debug)]
-pub struct ExePath(FilePath);
+pub struct ExePath(PathBuf);
+
+impl ExePath {
+    pub fn try_from_path(f: impl Into<PathBuf>) -> Result<Self, ExePathError> {
+        let p = f.into().canonicalize()?;
+        Ok(Self(p))
+    }
+}
 
 /// unit test cases for ParsedString, ParsedPart
 #[cfg(test)]

@@ -7,7 +7,13 @@ use std::{
     hash::Hash,
 };
 
-use daggy::{NodeIndex, petgraph::Direction};
+use daggy::{
+    NodeIndex,
+    petgraph::{
+        Direction,
+        visit::{Dfs, Visitable},
+    },
+};
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum DagError {
@@ -23,6 +29,9 @@ pub enum DagError {
     #[error("Missing T in T->idx lookup")]
     MissingAddedT,
 
+    #[error("Missing NodeIndex in internal Dag")]
+    MissingNInGraph,
+
     #[error("Cycle deteced when building DAG")]
     CyclicGraph(#[from] daggy::WouldCycle<()>),
 
@@ -31,9 +40,10 @@ pub enum DagError {
 }
 
 /// General Dag operations for identifier T. T is stored, and cloned so it should
-/// be a cheap identifier, not a heavy object.
+/// be a cheap identifier, not a heavy object (Copy-weight is ideal).
+/// Exposes ActaTools-relevant functions for the underlying dag
 #[derive(Debug)]
-pub struct Dag<T>
+pub struct ActaDag<T>
 where
     T: Hash + PartialEq + Eq + Clone,
 {
@@ -41,7 +51,7 @@ where
     by_node: HashMap<T, NodeIndex>,
 }
 
-impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
+impl<T: Hash + PartialEq + Eq + Clone> ActaDag<T> {
     /// From a set of nodes and dependencies, builds the DAG. Automatically checks for cycles as edges are added, returning an DagError:CyclicGraph
     /// if so.
     /// Only T nodes with dependencies need to be defined in dependencies
@@ -99,6 +109,7 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
             .filter_map(|idx| self.dag.graph().node_weight(idx)))
     }
 
+    /// collects all the ancestors of a node
     pub fn collect_ancestors(&self, name: &T) -> Result<HashSet<T>, DagError> {
         let node_index = self.get_by_node(name)?;
         let mut ancestors = HashSet::new();
@@ -138,6 +149,34 @@ impl<T: Hash + PartialEq + Eq + Clone> Dag<T> {
             .neighbors_directed(node_idx, Direction::Outgoing)
             .filter_map(|idx| self.dag.graph().node_weight(idx)))
     }
+
+    /// Returns all the nodes in Depth First order, in the order of the starting nodes.
+    /// For the purposes of ActaStudy, this naturally will put the steps in the order if the starting nodes are generally
+    /// in the order of the "runs"
+    pub fn get_all_nodes_dfs<'a>(&self, starting_nodes: &Vec<T>) -> Result<Vec<T>, DagError> {
+        let visit_map = self.dag.visit_map();
+
+        let node_stack: Vec<_> = starting_nodes
+            .iter()
+            .rev()
+            .map(|t| self.get_by_node(t))
+            .collect::<Result<Vec<_>, DagError>>()?;
+
+        let mut dfs = Dfs::from_parts(node_stack, visit_map);
+
+        let mut dfs_nodes: Vec<T> = Vec::with_capacity(self.dag.node_count());
+        while let Some(nx) = dfs.next(&self.dag) {
+            dfs_nodes.push(
+                self.dag
+                    .graph()
+                    .node_weight(nx)
+                    .ok_or_else(|| DagError::MissingNInGraph)?
+                    .clone(),
+            );
+        }
+
+        Ok(dfs_nodes)
+    }
 }
 
 pub struct DagBuilder<T>
@@ -176,8 +215,8 @@ impl<T: Hash + Eq + Clone + Debug> DagBuilder<T> {
     }
 
     /// Consumes the builder to create a realized Dag
-    pub fn into_dag(self) -> Result<Dag<T>, DagError> {
-        Dag::build_from_nodes(self.nodes, self.dependencies)
+    pub fn into_dag(self) -> Result<ActaDag<T>, DagError> {
+        ActaDag::build_from_nodes(self.nodes, self.dependencies)
     }
 }
 
@@ -285,7 +324,7 @@ mod tests {
         dependencies.insert("a".to_string(), set(&["b"]));
         dependencies.insert("b".to_string(), set(&["a"]));
 
-        let err = Dag::build_from_nodes(nodes, dependencies).unwrap_err();
+        let err = ActaDag::build_from_nodes(nodes, dependencies).unwrap_err();
 
         assert!(matches!(err, DagError::CyclicGraph(_)));
     }
@@ -365,7 +404,7 @@ mod tests {
         let mut dependencies = HashMap::new();
         dependencies.insert("b".to_string(), set(&["a"]));
 
-        let dag = Dag::build_from_nodes(nodes, dependencies).unwrap();
+        let dag = ActaDag::build_from_nodes(nodes, dependencies).unwrap();
 
         let parents = sorted_strings(dag.parents(&"b".to_string()).unwrap());
         assert_eq!(parents, vec!["a"]);

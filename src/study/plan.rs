@@ -3,24 +3,35 @@
 
 pub const VARSTEPID_DIGEST_LEN: usize = 8;
 
-use std::{collections::HashMap, os::raw};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     digest::{Digest, hash_digests_stable},
+    paths::{Directory, PathError},
     study::{
         configuration::{ConfigStep, ConfigStepName, StudySettings},
-        dag::Dag,
-        design::{BrId, Variation},
-        executionplan::{ExeStep, StudyExecutionPlan},
-        templatedstring::VarStepTemplatedString,
+        dag::{ActaDag, DagError},
+        design::{BrId, VId, Variation},
+        executionplan::{ExeStep, ExeStepId, StudyExecutionPlan},
+        templatedstring::{
+            ArgString, ExePath, ExePathError,
+            TemplatedStringError::{self, MissingContextKey},
+            VarStepTemplatedString, VarStepTemplatedStringError,
+        },
     },
     uid::{Uid, UidError, UidPrefix},
 };
 
 #[derive(Debug, thiserror::Error)]
-enum StudyPlanError {
+pub enum StudyPlanError {
     #[error(transparent)]
     ExeStepBuildError(#[from] ExeStepBuildError),
+
+    #[error(transparent)]
+    PathError(#[from] PathError),
+
+    #[error(transparent)]
+    DagError(#[from] DagError),
 }
 
 #[derive(Debug)]
@@ -29,21 +40,66 @@ pub struct StudyPlan {
     pub steps: Vec<ConfigStep>,
     pub varsteps: HashMap<VarStepId, VarStep>,
     pub variations: Vec<Variation>,
-    pub dag: Dag<VarStepId>,
+    pub variation_varsteps: HashMap<VId, Vec<VarStepId>>,
+    pub dag: ActaDag<VarStepId>,
 }
 
 impl StudyPlan {
     pub fn try_into_execution_plan(self) -> Result<StudyExecutionPlan, StudyPlanError> {
+        // Execution plan needs:
+        // settings: StudySettings, (from StudyPlan)
+        // run_order: Vec<ExeStepId>, (generated from DAG)
+        // execution_steps: HashMap<ExeStepId, ExeStep>, (generated from VarSteps)
+        // variations: HashMap<VId, Variation>, (from StudyPlan)
+        // branches: HashMap<BrId, VariableBranch>, (from StudyPlan)
+
+        // generate the execution order
+        // first go through each of the variations and find the starting varsteps
+        // these are the ones without any parents
+        let mut starting_nodes: Vec<VarStepId> = Vec::new();
+        for variation in &self.variations {
+            let variation_varsteps = &self.variation_varsteps[&variation.uid];
+            for varstep_uid in variation_varsteps {
+                let varstep = &self.varsteps[varstep_uid];
+
+                if varstep.get_dependent_steps().len() == 0 {
+                    starting_nodes.push(varstep_uid.clone())
+                }
+            }
+        }
+
+        // from each starting node, do a depth first search collecting all the nodes
+        let vs_order: Vec<VarStepId> = self.dag.get_all_nodes_dfs(&starting_nodes)?;
+        let exe_order: Vec<ExeStepId> = vs_order.into_iter().map(|x| ExeStepId::from(x)).collect();
+
         // Convert the varsteps into ExeSteps
+        let shared_directory = &self.settings.shared_dir;
+        let run_dir = &self.settings.run_dir;
+
+        // create a map of the VarstepId run directories
+        let mut varstep_dir_map: HashMap<VarStepId, Directory> =
+            HashMap::with_capacity(self.varsteps.len());
+        for vsid in self.varsteps.keys() {
+            let vsid_run_dir = Directory::new(run_dir.as_path().join(vsid.to_string()))?;
+            varstep_dir_map.insert(vsid.clone(), vsid_run_dir);
+        }
 
         let exe_steps = self
             .varsteps
             .into_iter()
-            .map(|(k, varstep)| varstep.try_into_execution_step().map(|r| (k, r)))
-            .collect::<Result<HashMap<VarStepId, ExeStep>, ExeStepBuildError>>()?;
+            .map(|(k, varstep)| {
+                let exe_uid = ExeStepId::from(k);
+                varstep
+                    .try_into_execution_step(&varstep_dir_map, &shared_directory)
+                    .map(|r| (exe_uid, r))
+            })
+            .collect::<Result<HashMap<ExeStepId, ExeStep>, ExeStepBuildError>>()?;
 
-        todo!()
-        // return Ok(StudyExecutionPlan::new())
+        Ok(StudyExecutionPlan {
+            settings: self.settings,
+            run_order: exe_order,
+            execution_steps: exe_steps,
+        })
     }
 }
 
@@ -57,11 +113,74 @@ pub struct VarStep {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum ExeStepBuildError {}
+pub enum ExeStepBuildError {
+    #[error(transparent)]
+    VarstepTemplatedStringError(#[from] VarStepTemplatedStringError),
+
+    #[error(transparent)]
+    TemplatedStringError(#[from] TemplatedStringError),
+
+    #[error(transparent)]
+    ExePathError(#[from] ExePathError),
+}
 
 impl VarStep {
-    pub fn try_into_execution_step(self) -> Result<ExeStep, ExeStepBuildError> {
-        todo!()
+    pub fn try_into_execution_step(
+        self,
+        varstep_dirs: &HashMap<Uid<VarStepIdType, 8>, crate::paths::Directory>,
+        shared_dir: &Directory,
+    ) -> Result<ExeStep, ExeStepBuildError> {
+        let run_exe = ExePath::try_from_path(
+            self.run_exe
+                .try_into_arg_string(varstep_dirs, shared_dir)?
+                .into_string(),
+        )?;
+
+        // turn all the VarStepTemplatedString into ArgStrings
+        let run_args = self
+            .run_args
+            .into_iter()
+            .map(|x| x.try_into_arg_string(varstep_dirs, shared_dir))
+            .collect::<Result<Vec<ArgString>, VarStepTemplatedStringError>>()?;
+
+        let run_dir = varstep_dirs
+            .get(&self.uid)
+            .ok_or_else(|| MissingContextKey(self.uid.to_string()))?
+            .clone();
+
+        Ok(ExeStep {
+            uid: ExeStepId::from(self.uid),
+            name: self.name,
+            run_args,
+            run_exe,
+            run_dir,
+        })
+    }
+
+    /// Gets all the referenced steps as strings in this Step
+    pub fn get_referenced_steps(&self) -> HashSet<VarStepId> {
+        let mut referenced_steps: HashSet<VarStepId> = HashSet::new();
+
+        // look for the TemplatedStringPart through all the run_args
+        for arg in &self.run_args {
+            for p in &arg.parts {
+                match p {
+                    crate::study::templatedstring::VarStepTemplatedStringPart::Varstep(s) => {
+                        referenced_steps.insert(s.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        referenced_steps
+    }
+
+    /// Gets the referenced steps minus the own step (as it is not dependent on it)
+    pub fn get_dependent_steps(&self) -> HashSet<VarStepId> {
+        let mut referenced_steps = self.get_referenced_steps();
+        referenced_steps.remove(&self.uid);
+
+        referenced_steps
     }
 }
 

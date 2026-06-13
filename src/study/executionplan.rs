@@ -4,17 +4,16 @@
 use std::collections::HashMap;
 
 use crate::{
-    paths::{Directory, FilePath},
+    paths::Directory,
     study::{
         configuration::{ConfigStepName, StudySettings},
-        design::{BrId, VId, VariableBranch, Variation},
-        plan::{StudyPlan, VarStep, VarStepId},
+        plan::VarStepId,
         templatedstring::{ArgString, ExePath},
     },
 };
 
 #[derive(Debug, thiserror::Error)]
-enum StudyExecutionPlanError {}
+pub enum StudyExecutionPlanError {}
 
 /// Holds the ExecutionSteps that are fully realized steps with all paths realized.
 #[derive(Debug)]
@@ -22,21 +21,10 @@ pub struct StudyExecutionPlan {
     pub settings: StudySettings,
     pub run_order: Vec<ExeStepId>,
     pub execution_steps: HashMap<ExeStepId, ExeStep>,
-    pub variations: HashMap<VId, Variation>,
-    pub branches: HashMap<BrId, VariableBranch>,
-}
-
-impl StudyExecutionPlan {
-    fn get_run_dir(
-        exe_id: &ExeStepId,
-        settings: &StudySettings,
-    ) -> Result<Directory, StudyExecutionPlanError> {
-        todo!()
-    }
 }
 
 /// Execution Step Id
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct ExeStepId(VarStepId);
 
 impl From<VarStepId> for ExeStepId {
@@ -45,20 +33,12 @@ impl From<VarStepId> for ExeStepId {
     }
 }
 
-enum ExeStepError {}
-
 /// Execution Step, holds all realized paths
 #[derive(Debug)]
 pub struct ExeStep {
-    uid: ExeStepId,
-    name: ConfigStepName,
-    run_args: Vec<ArgString>,
-    run_exe: ExePath,
-    run_dir: Directory,
-}
-
-impl ExeStep {
-    pub fn try_from_varstep(varstep: VarStep) -> Result<Self, ExeStepError> {
-        todo!()
-    }
+    pub uid: ExeStepId,
+    pub name: ConfigStepName,
+    pub run_args: Vec<ArgString>,
+    pub run_exe: ExePath,
+    pub run_dir: Directory,
 }

@@ -10,7 +10,5 @@ pub struct StudyOrchestrator {
 }
 
 impl StudyOrchestrator {
-    pub fn new(study_execution_plan: &StudyExecutionPlan) -> Self {
-        todo!()
-    }
+
 }

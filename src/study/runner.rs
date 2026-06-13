@@ -29,16 +29,16 @@ impl Runner {
 
 /// Typical local runner
 #[derive(Debug)]
-struct LocalRunner {
+pub struct LocalRunner {
     uid: RunnerId,
 }
 
 impl LocalRunner {
-    fn run(&mut self) -> Result<(), RunnerError> {
+    pub fn run(&mut self) -> Result<(), RunnerError> {
         todo!()
     }
 
-    fn status(&self) -> Result<RunnerStatus, RunnerError> {
+    pub fn status(&self) -> Result<RunnerStatus, RunnerError> {
         todo!()
     }
 }

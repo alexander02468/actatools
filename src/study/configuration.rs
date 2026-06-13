@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use crate::{
     paths::{Directory, FilePath},
-    study::{self, design::VariableName, templatedstring::TemplatedString},
+    study::{design::VariableName, templatedstring::TemplatedString},
 };
 
 #[derive(Debug, thiserror::Error)]

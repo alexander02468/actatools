@@ -228,4 +228,5 @@ Alexander Baker
 
 ## License
 
-ActaTools is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+ActaTools is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details. If you would
+like to use ActaTools under a different license, please contact @Alexander02468.

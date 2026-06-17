@@ -8,7 +8,8 @@ Version 0.3.0
 [2. Installation](#2-installation) \
 [3. System Support](#3-system-support) \
 [4. Components of a Study](#4-components-of-a-study) \
-[5. The Configuration File](#5-the-configuration-file)
+[5. The Configuration File](#5-the-configuration-file) \
+[6. Code Design of ActaStudy](#6-actastudy-internal-code-design)
 
 ## 1. Introduction
 
@@ -271,3 +272,51 @@ Variable references are defined by `{variables.<VariableName>}` and refers to th
 #### 5.2.3 Shared references
 
 Shared references are defined by `{shared}` and refer to the `shared` directory of the study (default is `/shared`). This is mainly used to indicate when common files are shared across Steps -- which helps with tracking and evidence bundling. In general, every file used by a Step, that is not specific to a particular run (e.g. a Step reference) should be put in `shared` as that allows for ActaStudy to be aware of the file. This file can then be relocated into local evidence bundles, if desired. 
+
+# 6. ActaStudy internal code design
+
+## 6.1 Stages of the workflow
+
+The internal workflow of an ActaStudy transforms the study through different "phases", each phase slowly resolving the Study Configuration input by the user into a set of Runners (that will do the running).
+
+<img src="./assets/study_process.png" alt="Workflow of a ActaStudy" width="600">
+
+### 6.1.1 Study Configuration
+
+#### 6.1.1.1 Important variables/objects
+
+|variable | description |
+|---------|-------------|
+| `TemplatedString` | A string that has been parsed and templated portions (i.e., parts that need to be replaced) have been recognized |
+| `StudyConfiguration` | The representation of the input configuration which includes settings and the definitions of the Configuration Steps (`ConfigStep`)
+| `ConfigStep` | A step of the Configuration that represents a step defined in the Study Configuration File. No logical checking of the steps themselves, only that the it is correctly formatted.
+
+#### 6.1.1.2 Summary
+
+As soon as the Study Configuration File is parsed, a `StudyConfiguration` is created which represents the simple parsed intention of the Configuration File. In this, most attributes are represented by thin semantic objects over the raw input values. At this stage, the raw inputs are deemed valid -- that is any input format error are detected. This does not mean that the Study Configuration is correctly defined, only that the inputs parsed correctly.
+
+The inputs are parsed at this stage and turned into `TemplatedString` which have semantically detected and assigned references to other dynamic locations, such as other steps. The existence of said steps are not checked, nor if there are circularly or nonsensical dependencies.
+
+### 6.1.2 Study Design
+
+#### Important variables/objects
+
+### 6.1.3 Study Plan
+
+#### Important variables/objects
+
+### 6.1.4 Study Execution Plan
+
+#### Important variables/objects
+
+### 6.1.5 Study Orchestrator
+
+#### Important variables/objects
+
+## 6.2 `Runner` process
+
+Runners represent the workers that directly manage the job itself. 
+
+### 6.2.1 `LocalRunner` Process
+
+The Runner operates through various states. 

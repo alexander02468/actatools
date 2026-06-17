@@ -16,7 +16,6 @@ pub enum StudyOrchestratorError {
     #[error("Error occured while getting status {id} : {error}")]
     RunnerStatusError { id: RunnerId, error: RunnerError },
 
-
     #[error("No runners are ready to run")]
     NoRunnersReady,
 }
@@ -127,9 +126,5 @@ impl StudyOrchestrator {
     }
 }
 
-
 #[cfg(test)]
-mod test_study_orchestrator{
-    
-
-}
+mod test_study_orchestrator {}

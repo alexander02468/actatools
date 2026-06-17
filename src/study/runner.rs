@@ -3,9 +3,7 @@
 
 use crate::paths::Directory;
 use crate::study::executionplan::ExeStepId;
-use crate::study::plan::{VARSTEPID_DIGEST_LEN, VarStepId};
 use crate::study::templatedstring::{ArgString, ExePath};
-use crate::uid::{Uid, UidPrefix};
 
 /// Runner heartbeat interval for the status indicator
 pub const HEARTBEAT_INTERVAL_SECONDS: usize = 5;

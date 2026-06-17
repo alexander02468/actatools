@@ -127,4 +127,15 @@ impl StudyOrchestrator {
 }
 
 #[cfg(test)]
-mod test_study_orchestrator {}
+mod test_study_orchestrator {
+    use crate::study::runner::Runner;
+
+
+    // setup some basic runners
+    struct MockRunner {}
+    impl Runner for MockRunner{
+
+        
+    }
+
+}

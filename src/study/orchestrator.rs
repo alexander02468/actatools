@@ -28,7 +28,7 @@ enum DependencyReadyStatus {
 
 /// Orchestrators job is to Manage the runners, querying their results, finding which ones can run next
 pub struct StudyOrchestrator {
-    runners: HashMap<RunnerId, Runner>,
+    runners: HashMap<RunnerId, Box<dyn Runner>>,
     runner_dependencies: HashMap<RunnerId, Vec<RunnerId>>,
 }
 
@@ -132,10 +132,15 @@ mod test_study_orchestrator {
 
 
     // setup some basic runners
-    struct MockRunner {}
+    struct MockRunner;
     impl Runner for MockRunner{
-
-        
+        fn run(&mut self) -> Result<(), crate::study::runner::RunnerError> {
+            todo!()
+        }
+    
+        fn status(&self) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::RunnerError> {
+            todo!()
+        }
     }
 
 }

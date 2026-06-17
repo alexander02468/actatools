@@ -39,24 +39,11 @@ impl std::fmt::Display for RunnerId {
     }
 }
 
-#[derive(Debug)]
-pub enum Runner {
-    Local(LocalRunner),
+pub trait Runner {
+    fn run(&mut self) -> Result<(), RunnerError>;
+    fn status(&self) -> Result<RunnerStatus, RunnerError>;
 }
 
-impl Runner {
-    pub fn run(&mut self) -> Result<(), RunnerError> {
-        match self {
-            Runner::Local(local_runner) => local_runner.run(),
-        }
-    }
-
-    pub fn status(&self) -> Result<RunnerStatus, RunnerError> {
-        match self {
-            Runner::Local(local_runner) => local_runner.status(),
-        }
-    }
-}
 
 /// Typical local runner
 #[derive(Debug)]
@@ -89,10 +76,6 @@ impl LocalRunner {
         Ok(new_runner)
     }
 
-    pub fn run(&mut self) -> Result<(), RunnerError> {
-        todo!()
-    }
-
     /// Initialize the working directory, status and such. If these files already exist, returns an RunnerError
     fn initialize(&mut self) -> Result<(), RunnerError> {
         todo!()
@@ -104,7 +87,14 @@ impl LocalRunner {
         todo!()
     }
 
-    pub fn status(&self) -> Result<RunnerStatus, RunnerError> {
+}
+
+impl Runner for LocalRunner {
+    fn run(&mut self) -> Result<(), RunnerError> {
+        todo!()
+    }
+
+    fn status(&self) -> Result<RunnerStatus, RunnerError> {
         todo!()
     }
 }

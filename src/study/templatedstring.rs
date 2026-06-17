@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::PathBuf};
 use thiserror;
 
 use crate::{
-    paths::{Directory, PathError},
+    paths::{Directory, FilePath, PathError},
     study::{
         configuration::ConfigStepName,
         design::{VariableName, VariableValue},
@@ -408,12 +408,12 @@ pub enum ExePathError {
 
 /// holds a realized path that exists
 #[derive(Debug)]
-pub struct ExePath(PathBuf);
+pub struct ExePath(FilePath);
 
 impl ExePath {
     pub fn try_from_path(f: impl Into<PathBuf>) -> Result<Self, ExePathError> {
         let p = f.into().canonicalize()?;
-        Ok(Self(p))
+        Ok(Self(FilePath::Absolute(p)))
     }
 }
 

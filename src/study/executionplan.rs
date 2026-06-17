@@ -7,7 +7,9 @@ use crate::{
     paths::Directory,
     study::{
         configuration::{ConfigStepName, StudySettings},
+        orchestrator::StudyOrchestrator,
         plan::VarStepId,
+        runner::RunnerId,
         templatedstring::{ArgString, ExePath},
     },
 };
@@ -21,6 +23,26 @@ pub struct StudyExecutionPlan {
     pub settings: StudySettings,
     pub run_order: Vec<ExeStepId>,
     pub execution_steps: HashMap<ExeStepId, ExeStep>,
+    pub execution_step_dependencies: HashMap<ExeStepId, Vec<ExeStepId>>,
+}
+
+impl StudyExecutionPlan {
+    pub fn into_orchestrator(self) -> Result<StudyOrchestrator, StudyExecutionPlanError> {
+        // convert the exe_dependicies to runner_dependencies
+        let runner_dependencies = self
+            .execution_step_dependencies
+            .iter()
+            .map(|(exe_uid, dependencies)| {
+                let exe_uid = RunnerId::from(*exe_uid);
+                let exe_dependencies: Vec<RunnerId> = dependencies
+                    .iter()
+                    .map(|inner_exe_uid| RunnerId::from(*inner_exe_uid))
+                    .collect();
+                (exe_uid, exe_dependencies)
+            })
+            .collect::<HashMap<RunnerId, Vec<RunnerId>>>();
+        todo!()
+    }
 }
 
 /// Execution Step Id
@@ -30,6 +52,12 @@ pub struct ExeStepId(VarStepId);
 impl From<VarStepId> for ExeStepId {
     fn from(varstep_id: VarStepId) -> Self {
         Self(varstep_id)
+    }
+}
+
+impl std::fmt::Display for ExeStepId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

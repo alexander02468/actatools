@@ -41,6 +41,7 @@ pub struct StudyPlan {
     pub varsteps: HashMap<VarStepId, VarStep>,
     pub variations: Vec<Variation>,
     pub variation_varsteps: HashMap<VId, Vec<VarStepId>>,
+    pub varstep_dependencies: HashMap<VarStepId, Vec<VarStepId>>,
     pub dag: ActaDag<VarStepId>,
 }
 
@@ -50,8 +51,7 @@ impl StudyPlan {
         // settings: StudySettings, (from StudyPlan)
         // run_order: Vec<ExeStepId>, (generated from DAG)
         // execution_steps: HashMap<ExeStepId, ExeStep>, (generated from VarSteps)
-        // variations: HashMap<VId, Variation>, (from StudyPlan)
-        // branches: HashMap<BrId, VariableBranch>, (from StudyPlan)
+        // execution_step_dependencies: HashMap<ExeStepId, Vec<ExeStepId>>
 
         // generate the execution order
         // first go through each of the variations and find the starting varsteps
@@ -71,6 +71,20 @@ impl StudyPlan {
         // from each starting node, do a depth first search collecting all the nodes
         let vs_order: Vec<VarStepId> = self.dag.get_all_nodes_dfs(&starting_nodes)?;
         let exe_order: Vec<ExeStepId> = vs_order.into_iter().map(|x| ExeStepId::from(x)).collect();
+
+        // convert the varstep_dependencies to exestep_dependencies
+        let execution_step_dependencies = self
+            .varstep_dependencies
+            .iter()
+            .map(|(vs_uid, dependencies)| {
+                let exe_uid = ExeStepId::from(*vs_uid);
+                let exe_dependencies: Vec<ExeStepId> = dependencies
+                    .iter()
+                    .map(|inner_vs_uid| ExeStepId::from(*inner_vs_uid))
+                    .collect();
+                (exe_uid, exe_dependencies)
+            })
+            .collect::<HashMap<ExeStepId, Vec<ExeStepId>>>();
 
         // Convert the varsteps into ExeSteps
         let shared_directory = &self.settings.shared_dir;
@@ -99,6 +113,7 @@ impl StudyPlan {
             settings: self.settings,
             run_order: exe_order,
             execution_steps: exe_steps,
+            execution_step_dependencies,
         })
     }
 }

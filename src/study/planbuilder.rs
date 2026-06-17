@@ -77,7 +77,7 @@ impl StudyPlanBuilder {
         )?;
 
         // Build the varstep_dag
-        let vs_dag = Self::build_varstep_dag(&study_varsteps, varstep_dependencies)?;
+        let vs_dag = Self::build_varstep_dag(&study_varsteps, &varstep_dependencies)?;
 
         // Copy/Move everything into the StudyPlan
         Ok(StudyPlan {
@@ -86,6 +86,7 @@ impl StudyPlanBuilder {
             varsteps: study_varsteps,
             variations: design.variations,
             variation_varsteps: varstep_generation_result.variation_varsteps,
+            varstep_dependencies,
             dag: vs_dag,
         })
     }
@@ -105,7 +106,7 @@ impl StudyPlanBuilder {
 
     fn build_varstep_dag(
         study_varsteps: &HashMap<VarStepId, VarStep>,
-        varstep_dependencies: HashMap<VarStepId, Vec<VarStepId>>,
+        varstep_dependencies: &HashMap<VarStepId, Vec<VarStepId>>,
     ) -> Result<ActaDag<VarStepId>, StudyPlanBuildError> {
         let mut vs_dag_builder: DagBuilder<VarStepId> = DagBuilder::new();
         for (uid, _) in study_varsteps {
@@ -626,7 +627,7 @@ mod test {
 
         let vs_dag = StudyPlanBuilder::build_varstep_dag(
             &varstep_generation_return.varsteps,
-            varstep_dependencies,
+            &varstep_dependencies,
         );
 
         assert!(vs_dag.is_ok())

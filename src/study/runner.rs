@@ -1,8 +1,11 @@
 // Copyright (C) 2026 Alexander Baker
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::path::PathBuf;
+
 use crate::paths::Directory;
 use crate::study::executionplan::ExeStepId;
+use crate::study::plan::VarStepId;
 use crate::study::templatedstring::{ArgString, ExePath};
 
 /// Runner heartbeat interval for the status indicator
@@ -12,9 +15,12 @@ pub const HEARTBEAT_INTERVAL_SECONDS: usize = 5;
 pub enum RunnerError {
     #[error("Runner initialization was attempted while the run files seem to already be present")]
     InitializationFilesAlreadyPresent,
+
+    #[error("Run did not complete successfully, see {err_file}")]
+    RunFailed { err_file: PathBuf },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RunnerStatus {
     Unknown,
     Uninitialized,
@@ -33,6 +39,12 @@ impl From<ExeStepId> for RunnerId {
     }
 }
 
+impl From<VarStepId> for RunnerId {
+    fn from(varstep_id: VarStepId) -> Self {
+        Self(ExeStepId::from(varstep_id))
+    }
+}
+
 impl std::fmt::Display for RunnerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -43,7 +55,6 @@ pub trait Runner {
     fn run(&mut self) -> Result<(), RunnerError>;
     fn status(&self) -> Result<RunnerStatus, RunnerError>;
 }
-
 
 /// Typical local runner
 #[derive(Debug)]
@@ -86,7 +97,6 @@ impl LocalRunner {
     fn update_status(&mut self) -> Result<(), RunnerError> {
         todo!()
     }
-
 }
 
 impl Runner for LocalRunner {

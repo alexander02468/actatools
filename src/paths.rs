@@ -189,6 +189,22 @@ impl FilePath {
     }
 }
 
+impl std::fmt::Display for FilePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilePath::Absolute(path_buf) => write!(f, "{}", path_buf.as_os_str().to_string_lossy()),
+            FilePath::Relative { base_dir, relative } => write!(
+                f,
+                "{}",
+                base_dir.0.join(relative).as_os_str().to_string_lossy()
+            ),
+            FilePath::RelativeIncomplete(path_buf) => {
+                write!(f, "{}", path_buf.as_os_str().to_string_lossy())
+            }
+        }
+    }
+}
+
 impl Serialize for FilePath {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

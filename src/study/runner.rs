@@ -18,6 +18,12 @@ pub const HEARTBEAT_INTERVAL_SECONDS: u64 = 5;
 pub enum RunnerError {
     #[error(transparent)]
     LocalRunnerError(#[from] LocalRunnerError),
+
+    #[error(transparent)]
+    StatusFileError(#[from] StatusFileError),
+
+    #[error("Runner did not run successfully. Error file : {err_file}")]
+    RunFailed { err_file: PathBuf },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -111,6 +117,9 @@ pub enum StatusFileError {
 
     #[error(transparent)]
     PathError(#[from] PathError),
+
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
 
     #[error("Multiple status files found : {}", .0.iter()
         .map(|x| x.to_string())
@@ -227,8 +236,10 @@ impl StatusFile {
     }
 
     /// Touch (update modified time) of an existing file. An error is returned if file does not already exist
-    pub fn touch(&self) -> Result<(), StatusFileError>{
-        if !self.exists()? {return Err(StatusFileError::CannotTouchNonExistingFile);}
+    pub fn touch(&self) -> Result<(), StatusFileError> {
+        if !self.exists()? {
+            return Err(StatusFileError::CannotTouchNonExistingFile);
+        }
 
         Ok(self
             .0
@@ -237,7 +248,7 @@ impl StatusFile {
             .touch()?)
     }
 
-    fn remove(&self) -> Result<(), StatusFileError> {
+    pub fn remove(&self) -> Result<(), StatusFileError> {
         Ok(self
             .0
             .as_ref()
@@ -263,7 +274,7 @@ impl StatusFile {
                 .ok_or(StatusFileError::CannotRenameUnknown)?,
         );
 
-        std::fs::rename(cur_file_path, new_path);
+        std::fs::rename(cur_file_path, new_path)?;
 
         Self::new(new_status, &run_dir)
     }
@@ -341,7 +352,6 @@ impl LocalRunner {
 
 impl Runner for LocalRunner {
     fn run(&self) -> Result<(), RunnerError> {
-
         // grab the status file and change it to running. hold and handle to it
         let status_file = self.change_status(RunnerStatus::Running)?;
 
@@ -376,18 +386,22 @@ impl Runner for LocalRunner {
             .args(run_args)
             .stdout(std_out_file)
             .stderr(err_out_file)
-            .current_dir(run_dir.clone())
+            .current_dir(run_dir)
             .spawn()
             .map_err(|e| LocalRunnerError::RunIoError { id: runner_id, e })?;
 
         // keep the running non-stale to show it's being worked on
-        let last_time = Instant::now();
+        let mut last_time = Instant::now();
         self.change_status(RunnerStatus::Running)?;
         loop {
             match child_handle.try_wait() {
                 // Ok means it has exited
-                Ok(Some(_status)) => {
-                    self.change_status(RunnerStatus::Completed)?;
+                Ok(Some(exit_status)) => {
+                    let _status_file = match exit_status.success() {
+                        true => self.change_status(RunnerStatus::Completed)?,
+                        false => self.change_status(RunnerStatus::Error)?,
+                    };
+
                     break;
                 }
 
@@ -396,7 +410,8 @@ impl Runner for LocalRunner {
                     // check the current time
                     let cur_time = Instant::now();
                     if cur_time - last_time > heartbeat_interval {
-                        status_file.touch();
+                        last_time = cur_time.clone();
+                        status_file.touch()?;
                     }
                     sleep(heartbeat_interval / 100); // target to be within 1/100th of the interval
                 }

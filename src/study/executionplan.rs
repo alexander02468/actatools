@@ -9,13 +9,16 @@ use crate::{
         configuration::{ConfigStepName, StudySettings},
         orchestrator::StudyOrchestrator,
         plan::VarStepId,
-        runner::RunnerId,
+        runner::{self, LocalRunner, Runner, RunnerId},
         templatedstring::{ArgString, ExePath},
     },
 };
 
 #[derive(Debug, thiserror::Error)]
-pub enum StudyExecutionPlanError {}
+pub enum StudyExecutionPlanError {
+    #[error("An error occurred while building the Orhcestrator")]
+    OrchetratorBuildError,
+}
 
 /// Holds the ExecutionSteps that are fully realized steps with all paths realized.
 #[derive(Debug)]
@@ -27,7 +30,11 @@ pub struct StudyExecutionPlan {
 }
 
 impl StudyExecutionPlan {
-    pub fn into_orchestrator(self) -> Result<StudyOrchestrator, StudyExecutionPlanError> {
+    pub fn try_into_orchestrator(self) -> Result<StudyOrchestrator, StudyExecutionPlanError> {
+        // runners: HashMap<RunnerId, Box<dyn Runner>>,
+        // run_order: Vec<RunnerId>,
+        // runner_dependencies: HashMap<RunnerId, Vec<RunnerId>>,
+
         // convert the exe_dependicies to runner_dependencies
         let runner_dependencies = self
             .execution_step_dependencies
@@ -41,7 +48,28 @@ impl StudyExecutionPlan {
                 (exe_uid, exe_dependencies)
             })
             .collect::<HashMap<RunnerId, Vec<RunnerId>>>();
-        todo!()
+        let run_order: Vec<RunnerId> = self.run_order.into_iter().map(RunnerId::from).collect();
+
+        // convert execution steps into LocalRunners (for now)
+        let runners: HashMap<RunnerId, Box<dyn Runner>> = self
+            .execution_steps
+            .into_iter()
+            .map(|(k, v)| {
+                let runner =
+                    LocalRunner::new(RunnerId::from(v.uid), v.run_exe, v.run_args, v.run_dir)
+                        .map_err(|_e| StudyExecutionPlanError::OrchetratorBuildError);
+                let runner_id = RunnerId::from(k);
+                let runner_tuple: Result<(RunnerId, Box<dyn Runner>), StudyExecutionPlanError> =
+                    runner.map(|x| (runner_id, Box::new(x) as Box<dyn Runner>));
+                runner_tuple
+            })
+            .collect::<Result<HashMap<RunnerId, Box<dyn Runner>>, StudyExecutionPlanError>>()?;
+
+        Ok(StudyOrchestrator::new(
+            runners,
+            run_order,
+            runner_dependencies,
+        ))
     }
 }
 

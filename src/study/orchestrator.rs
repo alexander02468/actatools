@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::study::runner::{LocalRunnerError, Runner, RunnerId, RunnerStatus};
+use crate::study::runner::{LocalRunnerError, Runner, RunnerError, RunnerId, RunnerStatus};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StudyOrchestratorError {
@@ -11,16 +11,10 @@ pub enum StudyOrchestratorError {
     RunnerIdNotFound(RunnerId),
 
     #[error("Error occured while running {id} : {error}")]
-    RunnerRunError {
-        id: RunnerId,
-        error: LocalRunnerError,
-    },
+    RunnerRunError { id: RunnerId, error: RunnerError },
 
     #[error("Error occured while getting status {id} : {error}")]
-    RunnerStatusError {
-        id: RunnerId,
-        error: LocalRunnerError,
-    },
+    RunnerStatusError { id: RunnerId, error: RunnerError },
 
     #[error("No runners are ready to run")]
     NoRunnersReady,
@@ -86,7 +80,7 @@ impl StudyOrchestrator {
                     id: *runner_id,
                     error: e,
                 })? {
-                RunnerStatus::Uninitialized => {
+                RunnerStatus::Unknown => {
                     // check all its dependencies are finished
                     let empty: Vec<RunnerId> = Vec::new();
                     let dep_runners = self
@@ -160,7 +154,7 @@ mod test_study_orchestrator {
         study::{
             orchestrator::{StudyOrchestrator, StudyOrchestratorError},
             plan::VarStepId,
-            runner::{LocalRunnerError, Runner, RunnerId, RunnerStatus},
+            runner::{Runner, RunnerError, RunnerId, RunnerStatus},
         },
     };
 
@@ -172,21 +166,19 @@ mod test_study_orchestrator {
     impl MockSuccessRunner {
         fn new_box() -> Box<Self> {
             Box::new(Self {
-                status: RunnerStatus::Uninitialized,
+                status: RunnerStatus::Unknown,
             })
         }
     }
 
     impl Runner for MockSuccessRunner {
-        fn run(&mut self) -> Result<(), crate::study::runner::LocalRunnerError> {
-            self.status = RunnerStatus::Completed;
+        fn run(&self) -> Result<(), crate::study::runner::RunnerError> {
             Ok(())
         }
 
         fn status(
             &self,
-        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::LocalRunnerError>
-        {
+        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::RunnerError> {
             Ok(self.status.clone())
         }
     }
@@ -199,23 +191,21 @@ mod test_study_orchestrator {
     impl MockFailRunner {
         fn new_box() -> Box<Self> {
             Box::new(Self {
-                status: RunnerStatus::Uninitialized,
+                status: RunnerStatus::Unknown,
             })
         }
     }
 
     impl Runner for MockFailRunner {
-        fn run(&mut self) -> Result<(), crate::study::runner::LocalRunnerError> {
-            self.status = RunnerStatus::Error;
-            Err(LocalRunnerError::RunFailed {
+        fn run(&self) -> Result<(), crate::study::runner::RunnerError> {
+            Err(RunnerError::RunFailed {
                 err_file: PathBuf::from("FakePath.error"),
             })
         }
 
         fn status(
             &self,
-        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::LocalRunnerError>
-        {
+        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::RunnerError> {
             Ok(self.status.clone())
         }
     }
@@ -268,7 +258,7 @@ mod test_study_orchestrator {
         let orchestrator = setup_study_orchestrator().unwrap();
         assert_matches!(
             orchestrator.get_status(create_runner_id(1)).unwrap(),
-            RunnerStatus::Uninitialized
+            RunnerStatus::Unknown
         )
     }
 

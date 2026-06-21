@@ -4,40 +4,35 @@
 // This file contains code related to paths, usually filepaths in both relative (complete/incomplete) and absolute
 
 use serde::{Deserialize, Deserializer, Serialize};
+use std::time::SystemTime;
 use std::{
-    error::Error,
+    fs::File,
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum PathError {
+    #[error("Tried to access parent directory of root")]
     InvalidParentOfRoot,
-    FilePathNeedsBaseDir,
-    NewFilePathInvalidArguments,
-    FileNameExtractionError,
-    NotADirectory(PathBuf),
-}
 
-impl std::fmt::Display for PathError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PathError::InvalidParentOfRoot => write!(f, "Tried to access parent directory of root"),
-            PathError::FilePathNeedsBaseDir => {
-                write!(f, "FilePath is not complete; needs a base directory")
-            }
-            PathError::NewFilePathInvalidArguments => {
-                write!(f, "FilePath::new had imcompatible arguments provided")
-            }
-            PathError::NotADirectory(path) => {
-                write!(f, "FilePath {} is not a directory", path.to_string_lossy())
-            }
-            PathError::FileNameExtractionError => {
-                write!(f, "Filename could not be extracted from FilePath")
-            }
-        }
-    }
+    #[error("FilePath is not complete; needs a base directory")]
+    FilePathNeedsBaseDir,
+
+    #[error("FilePath::new had imcompatible arguments provided")]
+    NewFilePathInvalidArguments,
+
+    #[error("Filename could not be extracted from FilePath")]
+    FileNameExtractionError,
+
+    #[error("FilePath {} is not a directory", .0.to_string_lossy())]
+    NotADirectory(PathBuf),
+
+    #[error("FileError during FilePath::touch() : {0}")]
+    TouchFileError(std::io::Error),
+
+    #[error("FileError during FilePath::remove() : {0}")]
+    RemoveFileError(std::io::Error),
 }
-impl Error for PathError {}
 
 /// Holds only a directory; checked at construction
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,6 +165,20 @@ impl FilePath {
             } => Ok(relative.as_path()),
             FilePath::RelativeIncomplete(_) => Err(PathError::FilePathNeedsBaseDir),
         }
+    }
+
+    /// Function that creates a file or updates it's modified time to the current time. Analogous to the Linux utility
+    pub fn touch(&self) -> Result<(), PathError> {
+        let file = File::create(self.get_path()?).map_err(|e| PathError::TouchFileError(e))?;
+
+        file.set_modified(SystemTime::now())
+            .map_err(|e| PathError::TouchFileError(e))?;
+        Ok(())
+    }
+
+    /// Removes the file at this location. If it does not exist, then an Error is returned
+    pub fn remove(&self) -> Result<(), PathError> {
+        std::fs::remove_file(self.get_path()?).map_err(|e| PathError::RemoveFileError(e))
     }
 
     /// Convenience function that fills in the base_dir if needed, otherwise ignores

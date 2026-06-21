@@ -82,9 +82,9 @@ Some terminology is needed to define how Studies are created and managed. Specif
 
 A Step is the smallest element of a Study that is tracked by ActaStudy. Other orchestration platforms may call this a Task.
 
-Abstractly, it consists of inputs, execution, and an outputs. In the beginning, we referred to it as a program execution. In reality, this could be the execution of a single Python script, or a call to a Bash script. 
+Abstractly, it consists of inputs, execution, and an outputs. In the beginning, we referred to it as a program execution. In reality, this could be the execution of a single Python script, or a call to a Bash script.
 
-It is relatively arbitrary what to consider a Step. One could make an entire "run" a step, and each run produces a single output. From an scheduling point of view, this creates a larger "fixed object" making it hard to slot together as resources that are taken in a later part of the execution are being blocked earlier than is needed. *This is largely not a concern for ActaStudy (but rather for HPC clusters), as resources are not tracked nor optimized.* 
+It is relatively arbitrary what to consider a Step. One could make an entire "run" a step, and each run produces a single output. From an scheduling point of view, this creates a larger "fixed object" making it hard to slot together as resources that are taken in a later part of the execution are being blocked earlier than is needed. *This is largely not a concern for ActaStudy (but rather for HPC clusters), as resources are not tracked nor optimized.*
 
 Instead, treat a Step as the most granular level of provenance available. That is, at what level do you want input and output files to be compared? If you have a giant Step, then you can't see granularly what changes and why.
 
@@ -98,9 +98,10 @@ In ActaStudy, the [templated strings](#52-templated-strings) within the [Configu
 
 A Branch is a realization of Variable and its value. In the Design File, it is a single value.
 
-It is named a Branch, because each of these variable-value pairs creates a branch on the graph. Each Variation is defined by a set of associated Branches, and each Step has associated Branches as well. 
+It is named a Branch, because each of these variable-value pairs creates a branch on the graph. Each Variation is defined by a set of associated Branches, and each Step has associated Branches as well.
 
 *Table 1: representation of a Design File*
+
 | run_id | var_x1 | var_x2 | var_x3 |
 |--------|--------|--------|--------|
 |    1   | 0.156  | "a24"  |  7     |
@@ -239,7 +240,7 @@ shared = ["scripts/run_preprocess.sh",
 
 ### 5.1 The Design File
 
-The design file is a comma-separated-value (CSV) file that defines the values of each of the Variations. Not all variables need to be included in the Study Configuration, but all variables in the Study Configuration need to be within the Design File. 
+The design file is a comma-separated-value (CSV) file that defines the values of each of the Variations. Not all variables need to be included in the Study Configuration, but all variables in the Study Configuration need to be within the Design File.
 
 The Design File in [Section 4.2](#42-branch) would be written in the file as:
 
@@ -251,7 +252,6 @@ run_id, var_x1, var_x2, var_x3
 ```
 
 Note that white space values are ignored *unless they are within a string*.
-
 
 ### 5.2 Templated Strings
 
@@ -271,7 +271,7 @@ Variable references are defined by `{variables.<VariableName>}` and refers to th
 
 #### 5.2.3 Shared references
 
-Shared references are defined by `{shared}` and refer to the `shared` directory of the study (default is `/shared`). This is mainly used to indicate when common files are shared across Steps -- which helps with tracking and evidence bundling. In general, every file used by a Step, that is not specific to a particular run (e.g. a Step reference) should be put in `shared` as that allows for ActaStudy to be aware of the file. This file can then be relocated into local evidence bundles, if desired. 
+Shared references are defined by `{shared}` and refer to the `shared` directory of the study (default is `/shared`). This is mainly used to indicate when common files are shared across Steps -- which helps with tracking and evidence bundling. In general, every file used by a Step, that is not specific to a particular run (e.g. a Step reference) should be put in `shared` as that allows for ActaStudy to be aware of the file. This file can then be relocated into local evidence bundles, if desired.
 
 # 6. ActaStudy internal code design
 
@@ -283,29 +283,54 @@ The internal workflow of an ActaStudy transforms the study through different "ph
 
 ### 6.1.1 Study Configuration
 
-#### 6.1.1.1 Important variables/objects
-
-|variable | description |
-|---------|-------------|
-| `TemplatedString` | A string that has been parsed and templated portions (i.e., parts that need to be replaced) have been recognized |
-| `StudyConfiguration` | The representation of the input configuration which includes settings and the definitions of the Configuration Steps (`ConfigStep`)
-| `ConfigStep` | A step of the Configuration that represents a step defined in the Study Configuration File. No logical checking of the steps themselves, only that the it is correctly formatted.
-
-#### 6.1.1.2 Summary
+The Study Configuration represents raw parsing of the inputs themselves without substantial processing. Instead, it parses and checks for input formatting.
 
 As soon as the Study Configuration File is parsed, a `StudyConfiguration` is created which represents the simple parsed intention of the Configuration File. In this, most attributes are represented by thin semantic objects over the raw input values. At this stage, the raw inputs are deemed valid -- that is any input format error are detected. This does not mean that the Study Configuration is correctly defined, only that the inputs parsed correctly.
 
+The Configuration Steps are also parsed, each one represented by a `ConfigStep` which represents the step as specified in the Configuration File.
+
 The inputs are parsed at this stage and turned into `TemplatedString` which have semantically detected and assigned references to other dynamic locations, such as other steps. The existence of said steps are not checked, nor if there are circularly or nonsensical dependencies.
+
+#### Important variables/objects
+
+|object | description |
+|---------|-------------|
+| `TemplatedString` | A string that has been parsed and templated portions (i.e., parts that need to be replaced) have been recognized |
+| `StudyConfiguration` | The representation of the input configuration which includes settings and the definitions of the Configuration Steps (`ConfigStep`) |
+| `ConfigStep` | A step of the Configuration that represents a step defined in the Study Configuration File. No logical checking of the steps themselves, only that the it is correctly formatted.|
 
 ### 6.1.2 Study Design
 
+In the Study Design, the variables are defined using the Design File. These are parsed into `VariableName`, `VariableValue` and a row in the Design File represents a `Variation`. Each of these then are held in a `StudyDesign` struct. The same way that the `StudyConfiguration` represents a parsed but relatively raw version of the Configuration File, the `StudyDesign` and its related variables represent a relatively raw, but parsed version the Design File. Furthermore, `VariableValue` is interpreted as a string only, as it is only used to pass into arguments. Thus, no type inference is needed, and this improves robustness.
+
 #### Important variables/objects
+
+|object | description |
+|---------|-------------|
+| `VariableName` | Stores the name of the variable, as specified by the column header. |
+| `VariableValue` | Stores the value of the variable as `String`, as specified in Design File. No type inference is used. |
+| `Branch` | Stores the `VariableName` and `VariableValue` combination together. It is a single "cell" or "entry" in the Design File |
+| `Variation` | Stores all the `Branch` that represents a row in the Design File. |
+| `StudyDesign` | Stores all the information related in the Design File. |
 
 ### 6.1.3 Study Plan
 
+In the Study Plan, the steps are "realized" using the templated strings and the Study Design. These are referred to as Variation Steps or `VarStep`. Each `VarStep` is uniquely determined by its `Branch` dependencies along with any `Branch` dependencies that are upstream. Thus, even though a `VarStep` has no dependency on a `Branch`, there are still multiple versions because the inputs may depend on an output from `VarStep` that does depend on the `Branch`
+
+Each `VarStep` holds a still unresolved run argument. The Step dependencies are now resolved (i.e. if it refers to "Step A" it has been resolved to the correct dependent Variation Step A), but the run paths are not yet realized (as that is a "execution" concern)
+
+It is here that the full Directed Acyclic Graph (`DAG`) is created using each of the `VarStep`. Cycles are checked and an error will be returned if detected. Using the `DAG`, along with `VarStep` seeds that represent entry points into the study given in the order specified in the Design File, the full run order is generated.
+
 #### Important variables/objects
 
+|object|description|
+|------|-----------|
+|`VarStep` | Stores information associated with a realized Step |
+| `DAG` | Directed Acyclic Graph that holds the `VarStep` dependencies |
+
 ### 6.1.4 Study Execution Plan
+
+In the Study Execution Plan, `VarStep` are resolved into Execution Steps, `ExeStep`. These represent the fully realized Step, with both the branches realized, and all run arguments have been realized into Strings.
 
 #### Important variables/objects
 
@@ -315,8 +340,8 @@ The inputs are parsed at this stage and turned into `TemplatedString` which have
 
 ## 6.2 `Runner` process
 
-Runners represent the workers that directly manage the job itself. 
+Runners represent the workers that directly manage the job itself.
 
 ### 6.2.1 `LocalRunner` Process
 
-The Runner operates through various states. 
+The Runner operates through various states.

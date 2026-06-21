@@ -334,7 +334,7 @@ impl VarStepTemplatedString {
 }
 
 /// Realized String Part that still holds the history of the string (e.g. was it resolved from something)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ArgStringPart {
     Literal(String),
     Step {
@@ -377,7 +377,7 @@ impl ArgStringPart {
 }
 
 /// Realized String that will be used as an argument. Comes from a TemplatedString
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ArgString {
     parts: Vec<ArgStringPart>,
 }
@@ -408,7 +408,7 @@ pub enum ExePathError {
 
 /// holds a realized path that exists
 #[derive(Debug)]
-pub struct ExePath(FilePath);
+pub struct ExePath(pub FilePath);
 
 impl ExePath {
     pub fn try_from_path(f: impl Into<PathBuf>) -> Result<Self, ExePathError> {

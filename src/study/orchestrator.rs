@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::study::runner::{Runner, RunnerError, RunnerId, RunnerStatus};
+use crate::study::runner::{LocalRunnerError, Runner, RunnerId, RunnerStatus};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StudyOrchestratorError {
@@ -11,10 +11,16 @@ pub enum StudyOrchestratorError {
     RunnerIdNotFound(RunnerId),
 
     #[error("Error occured while running {id} : {error}")]
-    RunnerRunError { id: RunnerId, error: RunnerError },
+    RunnerRunError {
+        id: RunnerId,
+        error: LocalRunnerError,
+    },
 
     #[error("Error occured while getting status {id} : {error}")]
-    RunnerStatusError { id: RunnerId, error: RunnerError },
+    RunnerStatusError {
+        id: RunnerId,
+        error: LocalRunnerError,
+    },
 
     #[error("No runners are ready to run")]
     NoRunnersReady,
@@ -154,7 +160,7 @@ mod test_study_orchestrator {
         study::{
             orchestrator::{StudyOrchestrator, StudyOrchestratorError},
             plan::VarStepId,
-            runner::{Runner, RunnerError, RunnerId, RunnerStatus},
+            runner::{LocalRunnerError, Runner, RunnerId, RunnerStatus},
         },
     };
 
@@ -172,14 +178,15 @@ mod test_study_orchestrator {
     }
 
     impl Runner for MockSuccessRunner {
-        fn run(&mut self) -> Result<(), crate::study::runner::RunnerError> {
+        fn run(&mut self) -> Result<(), crate::study::runner::LocalRunnerError> {
             self.status = RunnerStatus::Completed;
             Ok(())
         }
 
         fn status(
             &self,
-        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::RunnerError> {
+        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::LocalRunnerError>
+        {
             Ok(self.status.clone())
         }
     }
@@ -198,16 +205,17 @@ mod test_study_orchestrator {
     }
 
     impl Runner for MockFailRunner {
-        fn run(&mut self) -> Result<(), crate::study::runner::RunnerError> {
+        fn run(&mut self) -> Result<(), crate::study::runner::LocalRunnerError> {
             self.status = RunnerStatus::Error;
-            Err(RunnerError::RunFailed {
+            Err(LocalRunnerError::RunFailed {
                 err_file: PathBuf::from("FakePath.error"),
             })
         }
 
         fn status(
             &self,
-        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::RunnerError> {
+        ) -> Result<crate::study::runner::RunnerStatus, crate::study::runner::LocalRunnerError>
+        {
             Ok(self.status.clone())
         }
     }
